@@ -27,7 +27,7 @@ int main(int argc, char* argv[]){
             exit(-1);
         }
     
-    }A
+    }
     /*Finished with the test*/
     CSCArrayfree(&shit);
     free(y);
