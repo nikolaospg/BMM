@@ -1,4 +1,4 @@
-#include "algorithms.h"
+#include "csc.h"
 
 //Programm used to test whether the product is correct. It does this by comparing the result to the result we would have had without the CSC matrices.
 
@@ -16,10 +16,10 @@ int main(int argc, char* argv[]){
     int* b=random_vector(n*n);
     int* f=random_vector(n*n);          //the mask
     int* C_reconstructed;
-    CSCArray A=array2CSC(a, n);         //The operand matrices, in CSC form
-    CSCArray B=array2CSC(b, n);
-    CSCArray F=array2CSC(f, n);
-    CSCArray C;
+    CSCMatrix A=array2CSC(a, n);         //The operand matrices, in CSC form
+    CSCMatrix B=array2CSC(b, n);
+    CSCMatrix F=array2CSC(f, n);
+    CSCMatrix C;
 
     int* c=(int*)malloc(n*n*sizeof(int));       //The result of the 1D array multiplication
     if(c==NULL){
@@ -29,11 +29,11 @@ int main(int argc, char* argv[]){
 
     if(test_flag==1){
         C=bmmfiltered(A,B,F);                    //The result of the CSC matrix multiplication, (the function is written in algorithms.h)
-        C_reconstructed=CSC_convert(C);        //The convertion of the CSC result to a 1D array, so we can make the test.
+        C_reconstructed=CSC2array(C);        //The convertion of the CSC result to a 1D array, so we can make the test.
     }
     else{
         C=bmm(A,B);                    //The result of the CSC matrix multiplication, (the function is written in algorithms.h)
-        C_reconstructed=CSC_convert(C);        //The convertion of the CSC result to a 1D array, so we can make the test.
+        C_reconstructed=CSC2array(C);        //The convertion of the CSC result to a 1D array, so we can make the test.
     }
    /*Finished initialising*/
     
@@ -92,10 +92,10 @@ int main(int argc, char* argv[]){
     free(c);
     free(f);
     free(C_reconstructed);
-    CSCArrayfree(&A);
-    CSCArrayfree(&B);
-    CSCArrayfree(&F);
-    CSCArrayfree(&C);
+    CSCMatrixfree(&A);
+    CSCMatrixfree(&B);
+    CSCMatrixfree(&F);
+    CSCMatrixfree(&C);
 
     return 0;
 

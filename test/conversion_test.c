@@ -1,7 +1,7 @@
 /*This is a script demonstrating that the convertion from a row major to a CSC and back is correct. Just run the script.sh and you will see.*/
 
 
-#include "algorithms.h"
+#include "csc.h"
 
 
 int main(int argc, char* argv[]){
@@ -15,8 +15,8 @@ int main(int argc, char* argv[]){
 
     /*Creating the x array, getting the equivalent CSC struct, and then converting this as well*/
     int* x=random_vector(n*n);      //The initial array
-    CSCArray shit=array2CSC(x, n);   //The CSC struct we get 
-    int * y= CSC_convert(shit);     //The final array we get, after converting the converted one 
+    CSCMatrix shit=array2CSC(x, n);   //The CSC struct we get 
+    int * y= CSC2array(shit);     //The final array we get, after converting the converted one 
     /*Finished with the convertions*/
 
     /*Doing the test*/
@@ -26,10 +26,9 @@ int main(int argc, char* argv[]){
             printf("For i=%d, x[i]=%d, y[i]=%d\n. Error!",i,x[i],y[i]);
             exit(-1);
         }
-    
     }
     /*Finished with the test*/
-    CSCArrayfree(&shit);
+    CSCMatrixfree(&shit);
     free(y);
     free(x);
     return 0;
