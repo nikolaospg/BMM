@@ -102,7 +102,7 @@ int* CSC2array(CSCMatrix arg){
  *        n    ->  The number of rows/cols
  * outputs: The CSCMatrix structure
  * */
-CSCMatrix CSCfromMM(char* filename){
+CSCMatrix* CSCfromMM(char* filename){
     printf("Parsing %s\n", filename);
     FILE* fp = fopen(filename, "r");
     if (!fp) {
@@ -141,13 +141,13 @@ CSCMatrix CSCfromMM(char* filename){
     }
 
     int wrn_nzoo = 1;
-    CSCMatrix m;
-    m.col_ptr=(int*)malloc((N+1)*sizeof(int));
-    if(!m.col_ptr){
+    CSCMatrix* m = (CSCMatrix*) malloc(sizeof(CSCMatrix));
+    m->col_ptr=(int*)malloc((N+1)*sizeof(int));
+    if(!m->col_ptr){
         printf("Error, could not allocate col_ptr for MM file\n");
         exit(7);
     }
-    m.col_ptr[0] = 0;
+    m->col_ptr[0] = 0;
     int* col_index = (int*) malloc(nz*sizeof(int));
     int* row_index = (int*) malloc(nz*sizeof(int));
     printf("Matrix market file %s valid, parsing...\n", filename);
@@ -179,7 +179,7 @@ CSCMatrix CSCfromMM(char* filename){
 
         row_index[i+n_extra]--;  /* adjust from 1-based to 0-based */
         col_index[i+n_extra]--;
-        m.col_ptr[col_index[i+n_extra]+1]++; // col_ptr temporarily holds the number of nz in the previous column
+        m->col_ptr[col_index[i+n_extra]+1]++; // col_ptr temporarily holds the number of nz in the previous column
 
         if (is_symmetric && row_index[i+n_extra] != col_index[i+n_extra]) { // non-diagonal entry
             n_extra++;
@@ -187,7 +187,7 @@ CSCMatrix CSCfromMM(char* filename){
             row_index[i+n_extra] = col_index[i+n_extra-1];
             col_index[i+n_extra] = row_index[i+n_extra-1];
             
-            m.col_ptr[col_index[i+n_extra]+1]++;
+            m->col_ptr[col_index[i+n_extra]+1]++;
         }
     }
     if (is_symmetric) {
@@ -203,27 +203,27 @@ CSCMatrix CSCfromMM(char* filename){
 
     // cumsum
     for (int i = 0; i < N; i++) {
-        m.col_ptr[i+1] += m.col_ptr[i];
+        m->col_ptr[i+1] += m->col_ptr[i];
     }
 
     // move row indices so row_index are in column major order
     // m.col_ptr holds the position in g.row_index that the next row_index of the i-th column should be placed in
-    m.row_idx = (int*) malloc((nz+n_extra)*sizeof(int));
+    m->row_idx = (int*) malloc((nz+n_extra)*sizeof(int));
     for (int i = 0; i < nz+n_extra; i++) {
-         int dst = m.col_ptr[col_index[i]];
-         m.row_idx[dst] = row_index[i];
-         m.col_ptr[col_index[i]]++;
+         int dst = m->col_ptr[col_index[i]];
+         m->row_idx[dst] = row_index[i];
+         m->col_ptr[col_index[i]]++;
     }
 
     // undo changes in col_index
     int prev = 0;
     for (int i = 0; i < N; i++) {
-        int tmp = m.col_ptr[i];
-        m.col_ptr[i] = prev;
+        int tmp = m->col_ptr[i];
+        m->col_ptr[i] = prev;
         prev = tmp;
     }
 
-    assert(m.col_ptr[N] == nz+n_extra);
+    assert(m->col_ptr[N] == nz+n_extra);
 
     free(col_index);
     free(row_index);
@@ -239,11 +239,11 @@ CSCMatrix CSCfromMM(char* filename){
  *  returns: An binary integer (0,1), according to whether the search was successful or not
  *  The function works be calling the binary_search with the proper arguments
  * */
-int CSC_read_elem(CSCMatrix A, int row, int col){
-    int col_start=A.col_ptr[col];
-    int col_end=A.col_ptr[col+1];
+int CSC_read_elem(CSCMatrix* A, int row, int col){
+    int col_start=A->col_ptr[col];
+    int col_end=A->col_ptr[col+1];
 
-    return binary_search(A.row_idx, col_start, col_end, row);
+    return binary_search(A->row_idx, col_start, col_end, row);
 }
 
 /*Function to compute the inner product of a row of the A Array (in CSC), with a col of the B array (boolean product)
@@ -253,17 +253,17 @@ int CSC_read_elem(CSCMatrix A, int row, int col){
  *          int col->   The col of the B matrix that is part of the operation
  *  Outputs: A binary integer, according to whether there was at least one common element
  * */
-int inner_product(CSCMatrix A, CSCMatrix B, int row, int col){
+int inner_product(CSCMatrix* A, CSCMatrix* B, int row, int col){
     /*First creating some useful variables*/
-    int current_non_zeros=B.col_ptr[col+1]-B.col_ptr[col];    //Used to tell me how many non zero elements are in the column (of the B array)
-    int help_index=B.col_ptr[col];                               //Used so I can easily access the elements of the row_idx
+    int current_non_zeros=B->col_ptr[col+1]-B->col_ptr[col];    //Used to tell me how many non zero elements are in the column (of the B array)
+    int help_index=B->col_ptr[col];                               //Used so I can easily access the elements of the row_idx
     int current_row;        
     int ret_value=0;
     /*Finished with the variables*/
 
     /*This loop searches for every element of the column (so the search is done based on the column of B).*/
     for(int i=0; i<current_non_zeros; i++){
-        current_row=B.row_idx[help_index+i];
+        current_row=B->row_idx[help_index+i];
         if(CSC_read_elem(A,row,current_row)==1){      //If We get even one 1(successful search), then we stop to avoid the unnecessary iterations
             ret_value=1;
             break;
@@ -273,16 +273,15 @@ int inner_product(CSCMatrix A, CSCMatrix B, int row, int col){
 }
 
 
-/*function to compute the product between two arrays in csc form
+/*  BMM using definition, serial implementation, filtered
  *  inputs: cscarray a->    the a matrix
  *          cscarray b->    the b matrix
  *          cscarray f->    the f matrix(mask)
- *  the output is the boolean multiplication This is the version with the F filter
+ *  the output is the boolean multiplication
  * */
-CSCMatrix bmmfiltered(CSCMatrix A, CSCMatrix B, CSCMatrix F){
-
+CSCMatrix* bmm_dsf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F){
     /*First creating useful variables and allocating memory*/
-    int n=A.n;
+    int n=A->n;
     int* product_col_ptr=(int*)malloc((n+1)*sizeof(int));    //Allocating memory for the column vector of the structure to be returned
     if(product_col_ptr==NULL){
         printf("Could not allocate memory for the col_ptr in the product function, exiting\n");
@@ -304,14 +303,14 @@ CSCMatrix bmmfiltered(CSCMatrix A, CSCMatrix B, CSCMatrix F){
 
     /*Each i iteration corresponds to one column, and then each j to a row*/
     for(int i=0; i<n; i++){     //For one column   
-        F_col_non_zeros=F.col_ptr[i+1]-F.col_ptr[i];
-        row_help_index=F.col_ptr[i];
+        F_col_non_zeros=F->col_ptr[i+1]-F->col_ptr[i];
+        row_help_index=F->col_ptr[i];
         current_non_zeros=0;
 
         for(int j=0; j<F_col_non_zeros; j++){
-            inner_prod=inner_product(A,B,F.row_idx[row_help_index+j],i);         //We find the procuct with the row that the mask allows(only when the mask has non zero values do we calculate the product)
+            inner_prod=inner_product(A,B,F->row_idx[row_help_index+j],i);         //We find the procuct with the row that the mask allows(only when the mask has non zero values do we calculate the product)
             if(inner_prod==1){
-                product_row_idx[row_count]=F.row_idx[row_help_index+j];       //If the inner_prod is ==1 then I store the element in the row_idx, and increase my counters
+                product_row_idx[row_count]=F->row_idx[row_help_index+j];       //If the inner_prod is ==1 then I store the element in the row_idx, and increase my counters
                 row_count++;
                 current_non_zeros++;
             }
@@ -322,22 +321,22 @@ CSCMatrix bmmfiltered(CSCMatrix A, CSCMatrix B, CSCMatrix F){
     /*Finished doing the calculations*/
 
     product_row_idx=(int*)realloc(product_row_idx, (product_col_ptr[n])*sizeof(int));      //I reallocate with the final size.
-    CSCMatrix C={product_row_idx, product_col_ptr, n};
+    CSCMatrix* C = (CSCMatrix*) malloc(sizeof(CSCMatrix));
+    C->row_idx = product_row_idx;
+    C->col_ptr = product_col_ptr;
+    C->n = n;
 
     return C;
-
 }
 
-/*function to compute the product between two arrays in csc form
+/*  BMM using definition, serial implementation
  *  inputs: cscarray a->    the a matrix
  *          cscarray b->    the b matrix
  *  the output is the boolean multiplication. In this version, there is no F filter
  * */
-
-CSCMatrix bmm(CSCMatrix A, CSCMatrix B){
-
+CSCMatrix* bmm_ds(CSCMatrix* A, CSCMatrix* B){
     /*First creating useful variables and allocating memory*/
-    int n=A.n;
+    int n=A->n;
     
     int* product_col_ptr=(int*)malloc((n+1)*sizeof(int));
     if(product_col_ptr==NULL){
@@ -374,11 +373,24 @@ CSCMatrix bmm(CSCMatrix A, CSCMatrix B){
     }
 
     product_row_idx=(int*)realloc(product_row_idx, (product_col_ptr[n])*sizeof(int));  //I reallocate with the final size
-    CSCMatrix C={product_row_idx, product_col_ptr, n};
+    CSCMatrix* C = (CSCMatrix*) malloc(sizeof(CSCMatrix));
+    C->row_idx = product_row_idx;
+    C->col_ptr = product_col_ptr;
+    C->n = n;
 
     return C;
-
 }
 
-
-
+// interface for all BMM methods
+CSCMatrix* bmm(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, char* method, int filter) {
+    if (strcmp(method, "ds") == 0) {
+        if (filter) {
+            return bmm_dsf(A, B, F);
+        } else {
+            return bmm_ds(A, B);
+        }
+    } else {
+        fprintf(stderr, "Unknown method, %s, aborting\n", method);
+        exit(-1);
+    }
+}

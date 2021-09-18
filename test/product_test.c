@@ -19,7 +19,7 @@ int main(int argc, char* argv[]){
     CSCMatrix A=array2CSC(a, n);         //The operand matrices, in CSC form
     CSCMatrix B=array2CSC(b, n);
     CSCMatrix F=array2CSC(f, n);
-    CSCMatrix C;
+    CSCMatrix* C;
 
     int* c=(int*)malloc(n*n*sizeof(int));       //The result of the 1D array multiplication
     if(c==NULL){
@@ -28,12 +28,12 @@ int main(int argc, char* argv[]){
     }
 
     if(test_flag==1){
-        C=bmmfiltered(A,B,F);                    //The result of the CSC matrix multiplication, (the function is written in algorithms.h)
-        C_reconstructed=CSC2array(C);        //The convertion of the CSC result to a 1D array, so we can make the test.
+        C=bmm_dsf(&A,&B,&F);                    //The result of the CSC matrix multiplication, (the function is written in algorithms.h)
+        C_reconstructed=CSC2array(*C);        //The convertion of the CSC result to a 1D array, so we can make the test.
     }
     else{
-        C=bmm(A,B);                    //The result of the CSC matrix multiplication, (the function is written in algorithms.h)
-        C_reconstructed=CSC2array(C);        //The convertion of the CSC result to a 1D array, so we can make the test.
+        C=bmm_ds(&A,&B);                    //The result of the CSC matrix multiplication, (the function is written in algorithms.h)
+        C_reconstructed=CSC2array(*C);        //The convertion of the CSC result to a 1D array, so we can make the test.
     }
    /*Finished initialising*/
     
@@ -95,7 +95,7 @@ int main(int argc, char* argv[]){
     CSCMatrixfree(&A);
     CSCMatrixfree(&B);
     CSCMatrixfree(&F);
-    CSCMatrixfree(&C);
+    CSCMatrixfree(C);
 
     return 0;
 
