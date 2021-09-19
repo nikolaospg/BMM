@@ -26,16 +26,20 @@ int main(int argc, char* argv[]){
         printf("Could not allocate memory for c, exiting\n");
         exit(-1);
     }
+    /*Finished initialising*/
 
+    /*Doing the Calculations with the CSC matrices*/
     if(test_flag==1){
-        C=bmm_dsf(&A,&B,&F);                    //The result of the CSC matrix multiplication, (the function is written in algorithms.h)
+        C=bmm_dsf(&A,&B,&F);                    //The result of the CSC matrix multiplication with the filter, (the function is written in csc.h)
         C_reconstructed=CSC2array(*C);        //The convertion of the CSC result to a 1D array, so we can make the test.
     }
     else{
-        C=bmm_ds(&A,&B);                    //The result of the CSC matrix multiplication, (the function is written in algorithms.h)
+        C=bmm_ds(&A,&B);                    //The result of the CSC matrix multiplication, (the function is written in csc.h)
         C_reconstructed=CSC2array(*C);        //The convertion of the CSC result to a 1D array, so we can make the test.
     }
-   /*Finished initialising*/
+    /*Finished with the CSC*/
+
+   
     
     /*Doing the 1D array multiplication*/
     //The case of filtered BMM
@@ -79,7 +83,7 @@ int main(int argc, char* argv[]){
     //c[5]=-1;    
     for(int i=0; i<n*n; i++){
         if(c[i]!=C_reconstructed[i]){
-            printf("For i=%d,c=%d and C=%d. Error\n",i, c[i], C_reconstructed[i]);
+            printf("\nFor i=%d,c=%d and C=%d (C is the CSC mult. result). Error on product_test!\n",i, c[i], C_reconstructed[i]);
             exit(-1);
         }
     

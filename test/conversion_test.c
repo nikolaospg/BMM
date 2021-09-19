@@ -23,7 +23,7 @@ int main(int argc, char* argv[]){
     //x[5]=3;       //Uncomment to deliberately create an error and see that the check is ok
     for(int i=0; i<n*n; i++){
         if(x[i]!=y[i]){
-            printf("For i=%d, x[i]=%d, y[i]=%d\n. Error!",i,x[i],y[i]);
+            printf("For i=%d, x[i]=%d, y[i]=%d. Error On conversion_test! \n",i,x[i],y[i]);
             exit(-1);
         }
     }

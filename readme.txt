@@ -1,4 +1,2 @@
-Isos prepei na valume uint32... gia tin ora to kano me int kanoniko. Ean alakso gnomi vgazo comment apo ekei klp klp.Episis ta kanonika arrays ta exo row major 
-Den exo ilopoiisei to na ginei to ginomeno me blocks
-Prepei na kanoume sinartisi pou na diavazi apo kapou enan CSC. Mexri stigmis apla metatrepo kanonikous pinakes se CSC. Omos me afto ton tropo den boro na elenkso xronous gia megalous pinakes
-
+make test -> compiles and run the source files used for testing. The execution is done with the help of all_tests.bash
+make data -> downloads and extracts the files specified on the dataset.txt file. Done with the help of get_data.bash

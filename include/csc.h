@@ -246,7 +246,7 @@ int CSC_read_elem(CSCMatrix* A, int row, int col){
     return binary_search(A->row_idx, col_start, col_end, row);
 }
 
-/*Function to compute the inner product of a row of the A Array (in CSC), with a col of the B array (boolean product)
+/*Function to compute the inner product of a row of the A Matrix (in CSC), with a col of the B Matrix (boolean product)
  *  Inputs: CSCMatrix A  ->The two matrices, in CSC form
  *          CSCMatrix B
  *          int row->   The row of the A matrix that is part of the operation
@@ -274,10 +274,10 @@ int inner_product(CSCMatrix* A, CSCMatrix* B, int row, int col){
 
 
 /*  BMM using definition, serial implementation, filtered
- *  inputs: cscarray a->    the a matrix
- *          cscarray b->    the b matrix
- *          cscarray f->    the f matrix(mask)
- *  the output is the boolean multiplication
+ *  inputs: CSCMatrix* A->    the a matrix
+ *          CSCMatrix* B->    the b matrix
+ *          CSCMatrix* F->    the f matrix(mask)
+ *  the output is the boolean multiplication (CSCMatrix*)
  * */
 CSCMatrix* bmm_dsf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F){
     /*First creating useful variables and allocating memory*/
@@ -330,9 +330,9 @@ CSCMatrix* bmm_dsf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F){
 }
 
 /*  BMM using definition, serial implementation
- *  inputs: cscarray a->    the a matrix
- *          cscarray b->    the b matrix
- *  the output is the boolean multiplication. In this version, there is no F filter
+ *  inputs: CSCMatrix* A->    the a matrix
+ *          CSCMatrix* B->    the b matrix
+ *  the output is the boolean multiplication (CSCMatrix*). In this version, there is no F filter
  * */
 CSCMatrix* bmm_ds(CSCMatrix* A, CSCMatrix* B){
     /*First creating useful variables and allocating memory*/

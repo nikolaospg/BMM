@@ -49,13 +49,11 @@ int* random_vector(int size){
     return ret;
 }
 
-//Returns 1 if the requested element exists in the array it returns 0.
+//Returns 1 if the requested element exists in the array, else it returns 0.
 //Args: int* a-> Pointer to the array
-//      initial_index ->    The index of the first element of the array (the user just passes 0), it is only different for the recursive calls inside the function.
-//      size->          The number of elements of the array
+//      begin ->    Helps us find the beginning position of the search algorithm
+//      end->        Helps us find the ending position of the algorithm
 //      elem->        The wanted element
-//      The reason we pass the initial_index argument is to be able to know the actual index of the element we get. The algorithm works by cutting the array and passing the parts of it
-//      as arguments, so in the recursive calls the information about the initial index is lost.
 int binary_search(int* a,int begin, int end, int elem){
     if(begin <= end){
         int mid_idx = begin + (end-begin)/2;
