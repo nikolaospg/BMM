@@ -12,5 +12,6 @@ do
   ./bin/product_test 500 0
   ./bin/product_test 500 1
   ./bin/conversion_test 500
+  ./bin/blocking_test 500 20
   echo "Iteration $i Complete - No Errors"
 done 

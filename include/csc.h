@@ -28,6 +28,17 @@ void CSCMatrixfree(CSCMatrix* arg){
 }
 
 /**
+ * Frees the memory allocated by a CSCMatrix**. nb is the dimension of the CSCMatrix** (such that nb*nb is the total amount of elements of the CSCMatrix**)
+ **/
+void ArrayCSCMatrixfree(CSCMatrix** arg, int nb){
+    for(int i=0; i< nb*nb; i++){
+        CSCMatrixfree(arg[i]);
+        free(arg[i]);
+    }
+    free(arg);
+}
+
+/**
  * Function that converts a row major array to CSC
  * inputs:init_array -> The initial array (row_major)
  *        n    ->  The number of rows/cols
@@ -231,6 +242,260 @@ CSCMatrix* CSCfromMM(char* filename){
     printf("Sparse matrix from file %s created successfully\n", filename);
     return m;
 }
+
+
+/**
+ *  The Following function is used to extract the values from one BLOCK COLUMN of the initial_matrix and store them in the CSCMatrix** blocked array.
+ *  The CSCMatrix** blocked is composed of nb*nb blocks. When we talk about a block column, we refer to one of the nb columns of the blocked matrix 
+ *  (each element of thece block columns is a block, and not a scalar value!).
+ *  By calling this function for every on of the nb block columns we manage to fill the values of the CSCMatrix** blocked.
+ *  inputs:
+ *      CSCMatrix* initial_matrix-> The initial matrix, in CSC form
+ *      CSCMatrix** blocked->   The blocks of the matrix, to be filled.
+ *      int block_column->      The specific block column that we are currently working with.
+ * */
+void fill_column(CSCMatrix* initial_matrix, CSCMatrix** blocked, int block_column){
+
+    /*Initialising Useful Variables*/
+    int n=initial_matrix->n;
+    int b=blocked[0]->n;
+    int nb=n/b;
+
+    int initial_column=block_column*b;      //We get the number of the initial Column (actual column - not a block one) of the Block Column we are working with.
+
+    int current_column;                 //Helps us later on by telling us the column we are working with on every iteration
+    int column_offset;                  //Helps us to properly index the row_idx of the initial matrix.
+    int current_row;                    //The row we get from the initial matrix in every iteration. It is stored in the blocked matrix
+    int row_count;                      //Again helps us index the row_idx matrix, when we are in a specific column
+    int current_col_nz;                 //The non zero elements of the column. Used to know how many iteration steps are to be done.
+    int current_block_index;            //Helps us properly index the array with the blocks
+    CSCMatrix* current_block;           //Helps us to easily use and manipulate the current block.
+
+    //Initialising memory for the row_idx vectors of the blocks of this specific block column://
+    int* row_idx_sizes=(int*)malloc(nb*sizeof(int));        //This vector holds information about the size of the row_idx vectors of each block
+    int initial_idx_size=3*b;                               //We initialise them with a size of 3*. The space complexity is of the same order as the one for col_ptr
+    if(row_idx_sizes==NULL){
+            printf("Could not allocate memory for the row_idx_sizes on the fill_Column function, Error!\n");
+            exit(-1);
+    }
+    for(int i=0; i<nb; i++){
+        row_idx_sizes[i]=initial_idx_size;
+        blocked[i*nb +block_column]->row_idx=(int*)malloc( initial_idx_size*sizeof(int));       //Initialising for b elements only
+        if(blocked[i*nb +block_column]->row_idx==NULL){
+            printf("could not allocate memory in fill_Column function for the row_idx of the %dth element of the blocked array, exiting\n",i);
+            exit(-1);
+        }
+    }
+    /*Finished initialising Useful Variables*/
+
+
+    /*Now extracting the values from the initial matrix and filling up blocks*/
+    //Each i iteration of the following loop corresponds to one whole column of the block column
+    for(int i=0; i<b; i++){
+
+        current_column=initial_column+i;
+        column_offset=initial_matrix->col_ptr[current_column];
+        row_count=0;                //Set =0 in each new column
+        current_col_nz=initial_matrix->col_ptr[current_column+1]-initial_matrix->col_ptr[current_column];
+        //The following for loop is used to properly initialise the values for the col_ptr structure for every block of the block column
+        for (int block_index=0; block_index<nb; block_index++){
+            current_block_index=block_index*nb +block_column;
+            blocked[current_block_index]->col_ptr[i+1]=blocked[current_block_index]->col_ptr[i];
+        }
+        //Each j iteration of the for loop corresponds to one nz element of the column
+        for (int j=0; j<current_col_nz; j++){
+            current_row=initial_matrix->row_idx[column_offset+row_count];       //The element we just extracted
+            row_count++;
+
+            //With current_row/b we understand in which one of the nb blocks of the block column the element belongs to - we also change the current_block value to point to the current_block:
+            current_block=blocked[(current_row/b) *nb +block_column];       
+            current_block->col_ptr[i+1]=current_block->col_ptr[i+1]+1;              //Increasing the amount of elements in the specific column of the block
+            current_block->row_idx[current_block->col_ptr[i+1]-1]=current_row%b;   //We add current_row%b in the block!!  
+        }
+
+        //The following for loop is used to reallocate the size of row_idx if needed
+        for (int block_index=0; block_index<nb; block_index++){
+            current_block_index=block_index*nb +block_column;
+            if(row_idx_sizes[block_index] -b < blocked[current_block_index]->col_ptr[i+1]){          //If the current block cannot hold more than b more elements, we increase the size
+                row_idx_sizes[block_index]=row_idx_sizes[block_index]+2*b;       //We add 2b more elements
+                blocked[current_block_index]->row_idx=(int*)realloc(blocked[current_block_index]->row_idx,row_idx_sizes[block_index]*sizeof(int));
+            }
+        }
+
+    }
+
+    //In the following for loop we reallocate the memory for the row_idx of each block (final size)
+    for (int block_index=0; block_index<nb; block_index++){
+        current_block_index=block_index*nb +block_column;
+        current_block=blocked[current_block_index];
+        current_block->row_idx=(int*)realloc(current_block->row_idx, current_block->col_ptr[b]*sizeof(int));
+        if(current_block->row_idx==NULL){
+            printf("On the %d block I could not reallocate memory for row idx on the fill_Column function, Error!\n",block_index);
+            exit(-1);
+        }
+
+    }
+    /*Finished with this specific column*/
+
+    free(row_idx_sizes);
+}
+
+/**
+ *  The Following function helps us in the task of blocking a CSCMatrix
+ *  inputs:
+ *      CSCMatrix* initial_matrix  -> The initial CSCMatirx
+ *      int b->       The size of the new blocks. The initial matrix is partitioned into nbxnb blocks, where nb=n/b must be an integer. Also nb must be >b.
+ *  returns:
+ *      CSCMatrix** blocked -> This value points to an 1D array, with (nbxnb) CSCMatrix* values.
+ * */
+CSCMatrix** block_CSC(CSCMatrix* initial_matrix, int b){
+
+    /*Initialising Useful Variables*/
+    int n=initial_matrix->n;
+
+    if(n%b!=0){     //Demanding that nb=n/b is an integer
+        printf("In block_CSC, the mod(n,b)=%d, which is !=0. Error! mod(n,b) must be =0!\n",n%b);
+        exit(1);
+    }
+    int nb=n/b;
+    if(nb<=b){      //Demanding that nb>b
+        printf("The nb=%d, b=%d. nb must be >b, error!\n",nb,b);
+        exit(2);
+    }
+
+    /*Finished initialising useful variables*/
+
+    /*Now allocating memory for the CSCMatrix** (to be returned)*/
+    CSCMatrix** blocked=(CSCMatrix**)malloc(nb*nb*sizeof(CSCMatrix*));   
+    if(blocked==NULL){          
+        printf("could not allocate memory in block_CSC function for the CSCMatrix** blocked, exiting\n");
+        exit(-1);
+    }    
+
+    //In each iteration of the following for loop, We allocate memory for one of the nbxnb blocks. 
+    for (int i=0; i<nb*nb; i++){
+        blocked[i]=(CSCMatrix*)malloc(sizeof(CSCMatrix));
+        if(blocked[i]==NULL){
+            printf("could not allocate memory in block_CSC function for the %dth element of the blocked array, exiting\n",i);
+            exit(-1);
+        }
+        blocked[i]->n=b;            
+
+        blocked[i]->col_ptr=(int*)malloc( (b+1)*sizeof(int));    //I know that every block has b columns
+        if(blocked[i]->col_ptr==NULL){
+            printf("could not allocate memory in block_CSC function for the col_ptr of the %dth element of the blocked array, exiting\n",i);
+            exit(-1);
+        }
+        blocked[i]->col_ptr[0]=0;
+        //The memory for row_idx is allocated later on.
+    }
+    /*Finished with the CSCMatrix** blocked initialisation*/
+
+
+    /*Calling the fill_column function for every block column */
+    for (int i=0; i<nb; i++){
+        fill_column(initial_matrix, blocked, i);
+    }
+    
+    return blocked;
+    /*Finished with the algorithm.*/
+}
+
+
+/**
+ *  The Following function helps us in the task of reconstructing one Matrix (CSC Form) from a blocked version of the same matrix
+ *  It is used to verify that the process of blocking is done correctly
+ *  inputs:
+ *      1)CSCMatrix** blocked   -> the blocked version of the matrix
+ *      2)int nb->      The nb parameter
+ *  outputs:
+ *      CSCMatrix* reconstructed-> The reconstructed CSC Matrix
+ * */
+CSCMatrix* reconstruct_from_blocks(CSCMatrix** blocked, int nb){
+
+    /*Initialising useful variables*/
+    int b=blocked[0]->n;
+    int n=b*nb;
+    int total_nz=0;
+
+    //Calculating the total amount of non zero elements:
+    for (int i=0; i<nb*nb; i++){
+        total_nz=total_nz+blocked[i]->col_ptr[b];
+    }
+
+    //Initialising memory for the original matrix//
+    CSCMatrix* original=(CSCMatrix*)malloc(sizeof(CSCMatrix));
+    if(original==NULL){
+        printf("On reconstruct_from_blocks could not allocate memory for original!, error\n");
+        exit(-1);
+    }
+
+    original->col_ptr=(int*)malloc((n+1)*sizeof(int));
+    if(original->col_ptr==NULL){
+        printf("On reconstruct_from_blocks could not allocate memory for original->col_ptr!, error\n");
+        exit(-1);
+    }
+    original->col_ptr[0]=0;
+
+
+    original->row_idx=(int*)malloc((total_nz)*sizeof(int));
+    if(original->row_idx==NULL){
+        printf("On reconstruct_from_blocks could not allocate memory for original->col_ptr!, error\n");
+        exit(-1);
+    }
+
+    original->n=n;
+    //Finished initialising memory for the original matrix//
+
+
+    CSCMatrix* current_block;
+    int block_col;              //The BLOCK COLUMN where some specific block belongs to.
+    int current_nz;         //The nz elements of a specific column on a specific block.
+    int relative_col;       //A column of the non blocked matrix corresponds to a column of the blocks. We name his relative_col. It is given by relative_col=column%b.
+    int current_relative_row;        //The element we just extracted (is a row on some block)
+    int current_row;        //current_row= block_row*b + current_relative_row
+    int row_count;            //counting how many elements I have found up until a specific point for one column. Again used for indexing.
+    int column_offset;      //Helps us index the row_idx vector for the reconstructed matrix
+    /*Finished initialising useful variables*/
+
+
+    /*Now extracting the elements from the blocked Matrix and storing them in the reconstructed one */
+
+    //Each col_index iteration of the following loop corresponds to one of the n columns of the reconstructed matrix
+    for(int col_index=0; col_index<n; col_index++){
+        column_offset=original->col_ptr[col_index];
+        row_count=0;                            //This is set=0 for each new column we study
+
+        //Each block row iteration of the following loop corresponds to one of the nb blocks in this specific column
+        for(int block_row=0; block_row<nb; block_row++){
+            block_col=col_index/b;                              //In which one of the nb BLOCK COLUMNS the current block belongs to.
+            current_block=blocked[block_col+ block_row*nb];     //Using the current_block variable to point to the current block
+            relative_col=col_index%b;
+            current_nz=current_block->col_ptr[relative_col+1]- current_block->col_ptr[relative_col];        //The non zero elements in this column of the block (to be stored in the reconstructed)
+
+            original->col_ptr[col_index+1]=original->col_ptr[col_index+1] +current_nz;      //Increasing the value of the col_index vector
+
+            //Each i iteration of the following loop corresponds to one non zero element of the current column of the current block
+            for(int i=0; i<current_nz; i++){
+                current_relative_row=current_block->row_idx[current_block->col_ptr[relative_col]+i];
+                current_row=block_row*b + current_relative_row;
+                original->row_idx[column_offset+row_count]=current_row;
+                row_count=row_count+1;
+
+
+            }
+        }
+        original->col_ptr[col_index+1]=original->col_ptr[col_index]+row_count;
+
+    }
+    /*Finished with the reconstructing task*/
+    
+    return original;
+
+}
+
+
+
 
 /*Searches for the element (row,col) in the A array. If it exists (is equal to 1), it returns 1 , else it returns 0
  *  inputs: The CSCMatrix struct A

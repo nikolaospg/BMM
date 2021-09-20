@@ -7,7 +7,7 @@ C_SOURCES = mmio/mmio.c
 CPP_SOURCES = src/sparse_graph.cpp
 SOURCES = $(C_SOURCES) $(CPP_SOURCES)
 
-CFLAGS=-Wall -O3 -Iinclude -Immio
+CFLAGS=-Wall -Iinclude -Immio
 CPPFLAGS=-std=c++0x $(CFLAGS)
 OMPFLAGS=-std=c++0x -Wall -O3 -fopenmp -DOMP
 PTHREADSFLAGS=-std=c++0x -Wall -O3 -pthread -DPTHREADS
@@ -33,6 +33,7 @@ main: bin | mmio
 test: bin | mmio
 	$(CC) $(CFLAGS) -o $(BINS_DIR)/product_test test/product_test.c $(LDFLAGS)
 	$(CC) $(CFLAGS) -o $(BINS_DIR)/conversion_test test/conversion_test.c $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(BINS_DIR)/blocking_test test/blocking_test.c $(LDFLAGS) 
 	chmod +x all_tests.bash
 	./all_tests.bash
 
