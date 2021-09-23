@@ -7,8 +7,8 @@ C_SOURCES = mmio/mmio.c
 CPP_SOURCES = src/sparse_graph.cpp
 SOURCES = $(C_SOURCES) $(CPP_SOURCES)
 
-CFLAGS=-Wall -O3 -Iinclude -Immio
-DEBUG_CFLAGS=-Wall -g -fsanitize=address -Iinclude -Immio
+CFLAGS=-Wall -O3 -Iinclude -Immio -std=c99 -D_POSIX_C_SOURCE=199309L # https://stackoverflow.com/questions/29666937/error-clock-monotonic-undeclared-first-use-in-this-function
+DEBUG_CFLAGS=-Wall -g -fsanitize=address -Iinclude -Immio -std=c99 -D_POSIX_C_SOURCE=199309L
 CPPFLAGS=-std=c++0x $(CFLAGS)
 OMPFLAGS=-std=c++0x -Wall -O3 -fopenmp -DOMP
 PTHREADSFLAGS=-pthread -DPTHREADS

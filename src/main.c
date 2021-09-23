@@ -1,6 +1,8 @@
 
 #include <unistd.h>
 #include <math.h>
+#include <getopt.h>
+#include <time.h>
 
 #include "csc.h"
 
@@ -53,7 +55,7 @@ int main(int argc, char** argv) {
     printf("A->n: %d\n", A->n);
     int k = sqrt(A->n);
     int b = 120;
-    block_CSC(A, 2*k);
+    block_CSC(A, k);
 
     // timing end
     struct timespec ts_end;
