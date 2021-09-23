@@ -1,5 +1,6 @@
 
 #include <unistd.h>
+#include <math.h>
 
 #include "csc.h"
 
@@ -48,7 +49,11 @@ int main(int argc, char** argv) {
     clock_gettime(CLOCK_MONOTONIC, &ts_start);
 
     // BMM (TODO: configure MPI when needed)
-    C = bmm(A, B, F, method, F != NULL);
+    //C = bmm(A, B, F, method, F != NULL);
+    printf("A->n: %d\n", A->n);
+    int k = sqrt(A->n);
+    int b = 120;
+    block_CSC(A, 2*k);
 
     // timing end
     struct timespec ts_end;
@@ -69,7 +74,7 @@ int main(int argc, char** argv) {
 
     CSCMatrixfree(A);
     CSCMatrixfree(B);
-    CSCMatrixfree(C);
+    //CSCMatrixfree(C);
     if (ffile)
         CSCMatrixfree(F);
 }

@@ -23,7 +23,6 @@ void print_vector2D(int* vector, int rows, int cols){
         }
         printf("\n");
     }   
-    printf("\n");
 }
 
 /*Creates a random vector with boolean values 

@@ -7,11 +7,12 @@ C_SOURCES = mmio/mmio.c
 CPP_SOURCES = src/sparse_graph.cpp
 SOURCES = $(C_SOURCES) $(CPP_SOURCES)
 
-CFLAGS=-Wall -Iinclude -Immio
+CFLAGS=-Wall -O3 -Iinclude -Immio
+DEBUG_CFLAGS=-Wall -g -fsanitize=address -Iinclude -Immio
 CPPFLAGS=-std=c++0x $(CFLAGS)
 OMPFLAGS=-std=c++0x -Wall -O3 -fopenmp -DOMP
-PTHREADSFLAGS=-std=c++0x -Wall -O3 -pthread -DPTHREADS
-LDFLAGS=$(MMIO_LIB)
+PTHREADSFLAGS=-pthread -DPTHREADS
+LDFLAGS=$(MMIO_LIB) -lm
 
 default: all
 
