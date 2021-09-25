@@ -13,7 +13,7 @@ int main(int argc, char* argv[]){
         exit(-1);
     }
 
-    int* x=random_vector(n*n);      //Creating some random x vector
+    int* x=random_vector(n*n, 0.9);      //Creating some random x vector
     CSCMatrix A=array2CSC(x,n);     //Getting the CSC form 
     //Finished initialising variables
     
@@ -22,7 +22,7 @@ int main(int argc, char* argv[]){
     CSCMatrix** blocked= block_CSC(&A, b);
     int nb=n/b;
 
-    CSCMatrix* reconstructed=reconstruct_from_blocks(blocked, nb);
+    CSCMatrix* reconstructed=reconstruct_from_blocks(blocked, nb, A.n);
     int* y=CSC2array(*reconstructed);       //The array form of the reconstructed matrix
     //Finished reconstructing and got the final array form of the reconstructed
     

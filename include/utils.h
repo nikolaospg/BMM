@@ -3,6 +3,7 @@
 #include <math.h>
 #include <time.h>
 #include <stdio.h>
+#include <assert.h>
 
 
 /** 
@@ -27,21 +28,22 @@ void print_vector2D(int* vector, int rows, int cols){
 
 /*Creates a random vector with boolean values 
  * input: The size of the vector
+ * sparsity: The sparsity of the vector. Each element will have a sparsity chance of being a zero
  * returns the pointer.*/
-int* random_vector(int size){
+int* random_vector(int size, int sparsity){
     int* ret=(int*)malloc(size*sizeof(int*));
     if(ret==NULL){
         printf("Could not allocate memory in random_vector function. Exiting\n");
         exit(-1);
-    }   
+    }
+    assert(sparsity >=0 && sparsity <=1);
 
     double temp;
     for(int i=0; i<size; i++){
         temp=rand()/(double)RAND_MAX;
-        if(temp>0.5){           //The way I convert this probability distribution to a discrete one, is by getting the ones >0.5 as equal to 1, and the rest as equal to 0
+        if(temp>sparsity){
             ret[i]=1;
-        }
-        else{
+        } else {
             ret[i]=0;
         }
     }   

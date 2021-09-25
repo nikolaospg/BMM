@@ -19,6 +19,12 @@ typedef struct{
     int n;            //number of columns (=number of rows because the matrix is square)
 }CSCMatrix;
 
+typedef struct{            
+    int* col_idx;
+    int* row_ptr;
+    int n;
+} CSRMatrix;
+
 
 /**
  * Frees the memory allocated for the row_idx and col_ptr of a specific CSCMatrix structure.
@@ -26,6 +32,11 @@ typedef struct{
 void CSCMatrixfree(CSCMatrix* arg){
     free(arg->col_ptr);
     free(arg->row_idx);
+}
+
+void CSRMatrixfree(CSRMatrix* arg){
+    free(arg->row_ptr);
+    free(arg->col_idx);
 }
 
 /**
@@ -106,6 +117,48 @@ int* CSC2array(CSCMatrix arg){
        }
    }
    return ret;
+}
+
+/* square CSC to CSR matrix conversion 
+   https://github.com/scipy/scipy/blob/3b36a574dc657d1ca116f6e230be694f3de31afc/scipy/sparse/sparsetools/csr.h#L376
+*/
+CSRMatrix* CSC2CSR(CSCMatrix* m) {
+    int nnz = m->col_ptr[m->n];
+    CSRMatrix* ret = (CSRMatrix*) malloc(sizeof(CSRMatrix));
+    ret->row_ptr = (int*) malloc((m->n+1)*sizeof(int));
+    ret->col_idx = (int*) malloc(nnz*sizeof(int));
+    ret->n = m->n;
+
+    for (int i = 0; i < nnz; i++) {
+        ret->row_ptr[m->row_idx[i]]++;
+    }
+
+    // nnz cumsum
+    for (int i = 0, cumsum = 0; i < m->n; i++) {
+        int tmp = ret->row_ptr[i];
+        ret->row_ptr[i] = cumsum;
+        cumsum += tmp;
+    }
+    ret->row_ptr[m->n] = nnz;
+
+    // fill indices
+    for(int col = 0; col < m->n; col++){
+        for(int j = m->col_ptr[col]; j < m->col_ptr[col+1]; j++){
+            int row  = m->row_idx[j];
+            int dest = ret->row_ptr[row];
+
+            ret->col_idx[dest] = col;
+            ret->row_ptr[row]++;
+        }
+    }
+
+    // restore row_ptr
+    for(int row = 0, last = 0; row <= ret->n; row++){
+        int tmp = ret->row_ptr[row];
+        ret->row_ptr[row] = last;
+        last = tmp;
+    }
+    return ret;
 }
 
 void print_csc(CSCMatrix* m) {
@@ -281,6 +334,8 @@ CSCMatrix** block_CSC(CSCMatrix* A, int b){
 
     //In each iteration of the following for loop, We allocate memory for one of the nbxnb blocks. 
     int init_row_idx_capacity = A->col_ptr[A->n]/(n_b*n_b)+1; // expected capacity (+1 for non zero)
+    // it is possible to use just n_b for storing the capacities but then it would not be possible to parallelize the 
+    // filling of the blocks in the future
     int* row_idx_capacities = (int*) malloc(n_b*n_b*sizeof(int)); // contains the allocation size of row_idx for each block
     if(row_idx_capacities==NULL){
         printf("could not allocate memory in block_CSC function for row_idx capacities, exiting\n");
@@ -358,14 +413,14 @@ CSCMatrix** block_CSC(CSCMatrix* A, int b){
  *  inputs:
  *      1)CSCMatrix** blocked   -> the blocked version of the matrix
  *      2)int nb->      The nb parameter
+ *      3)int n ->      Initial size of matrix to remove potential padding
  *  outputs:
  *      CSCMatrix* reconstructed-> The reconstructed CSC Matrix
  * */
-CSCMatrix* reconstruct_from_blocks(CSCMatrix** blocked, int nb){
+CSCMatrix* reconstruct_from_blocks(CSCMatrix** blocked, int nb, int n){
 
     /*Initialising useful variables*/
     int b=blocked[0]->n;
-    int n=b*nb;
     int total_nz=0;
 
     //Calculating the total amount of non zero elements:
@@ -444,9 +499,6 @@ CSCMatrix* reconstruct_from_blocks(CSCMatrix** blocked, int nb){
 
 }
 
-
-
-
 /*Searches for the element (row,col) in the A array. If it exists (is equal to 1), it returns 1 , else it returns 0
  *  inputs: The CSCMatrix struct A
  *          int row->   The desired row index
@@ -485,6 +537,22 @@ int inner_product(CSCMatrix* A, CSCMatrix* B, int row, int col){
         }
     }
     return ret_value;
+}
+
+/**
+ * sparse vector multiplication
+ */
+int spvm(int* vec1, int n1, int* vec2, int n2) {
+    int i=0, j=0;
+    while (i<n1 && j<n2) {
+        if (vec1[i] == vec2[j])
+            return 1;
+        else if (vec1[i] < vec2[j])
+            i++;
+        else
+            j++;
+    }
+    return 0;
 }
 
 
@@ -598,13 +666,113 @@ CSCMatrix* bmm_ds(CSCMatrix* A, CSCMatrix* B){
     return C;
 }
 
+/**
+ * BMM using SMMP algorithm for multiplication
+ * https://www.researchgate.net/publication/2364309_Sparse_Matrix_Multiplication_Package_SMMP
+ * Complexity: O(n*K^2) where K is the maximum nnz per column
+ * Also uses O(n) space
+ */
+CSCMatrix* bmm_ss(CSCMatrix* A, CSCMatrix* B) {
+    int n = B->n;
+    CSCMatrix* C = (CSCMatrix*) malloc(sizeof(CSCMatrix));
+    C->n = n;
+    C->col_ptr = (int*) malloc((n+1)*sizeof(int));
+
+    // guess C's row_idx capacity
+    int row_idx_capacity = B->n;
+    C->row_idx = (int*) malloc(row_idx_capacity*sizeof(int));
+
+    // used to not count multiple NZ per inner product
+    int* mask = (int*) malloc(n*sizeof(int));
+    for (int i = 0; i < n; i++) mask[i] = -1;
+    C->col_ptr[0] = 0;
+
+    int nnz = 0;
+    for(int i = 0; i < n; i++){
+        for(int kk = A->col_ptr[i]; kk < A->col_ptr[i+1]; kk++){
+            int k = A->row_idx[kk];
+            for(int jj = B->col_ptr[k]; jj < B->col_ptr[k+1]; jj++){
+                int j = B->row_idx[jj];
+                if(mask[j] != i){
+                    mask[j] = i;
+                    if (nnz >= row_idx_capacity) { // double row_idx capacity
+                        row_idx_capacity *=2;
+                        C->row_idx = realloc(C->row_idx, row_idx_capacity*sizeof(int));
+                    }
+                    C->row_idx[nnz] = j;
+                    nnz++;
+                }
+            }
+        }         
+        C->col_ptr[i+1] = nnz;
+    }
+
+    C->row_idx = realloc(C->row_idx, nnz*sizeof(int));
+    return C;
+}
+
+/**
+ * BMM using SMMP algorithm for multiplication
+ * https://www.researchgate.net/publication/2364309_Sparse_Matrix_Multiplication_Package_SMMP
+ * Complexity: O(n*K^2) where K is the maximum nnz per column
+ * Also uses O(n) space
+ */
+CSCMatrix* bmm_ssf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F) {
+    printf("TODO: implement ssf\n");
+    return bmm_ss(A, B);
+}
+
+/**
+ * serial block BMM
+ */
+CSCMatrix* bmm_bs(CSCMatrix* A, CSCMatrix* B, int b) {
+    printf("TODO: implement bs\n");
+    return NULL;
+}
+
+CSCMatrix* bmm_bsf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, int b) {
+    CSCMatrix** blocka = block_CSC(A, b);
+    CSCMatrix** blockb = block_CSC(B, b);
+    CSCMatrix** blockf = block_CSC(F, b);
+
+    assert(A->n == B->n);
+    assert(A->n == F->n);
+
+    int n_b=ceil(A->n/((double) b));
+    CSCMatrix** blockc = (CSCMatrix**) malloc(n_b*n_b*sizeof(CSCMatrix*));   
+    if(blockc == NULL){    
+        printf("could not allocate memory in block_CSC function for the CSCMatrix** blocked, exiting\n");
+        exit(-1);
+    }
+    for (int i = 0; i < n_b; i++) {
+        for (int j = 0; j < n_b; j++) {
+            int block_idx = i*n_b+j;
+            blockc[block_idx] = bmm_dsf(&A[block_idx], &B[block_idx], &F[block_idx]);
+        }
+    }
+
+    return NULL;
+}
+
 // interface for all BMM methods
-CSCMatrix* bmm(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, char* method, int filter) {
+CSCMatrix* bmm(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, char* method, int filter, int b) {
     if (strcmp(method, "ds") == 0) {
         if (filter) {
             return bmm_dsf(A, B, F);
         } else {
             return bmm_ds(A, B);
+        }
+    } else if (strcmp(method, "bs") == 0) {
+        if (filter) {
+            return bmm_bsf(A, B, F, b);
+        } else {
+            return bmm_bs(A, B, b);
+        }
+    } else if (strcmp(method, "ss") == 0) {
+        if (filter) {
+            return bmm_ssf(A, B, F);
+        } else {
+            return bmm_ss(A, B);
         }
     } else {
         fprintf(stderr, "Unknown method, %s, aborting\n", method);

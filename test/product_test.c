@@ -4,17 +4,20 @@
 
 int main(int argc, char* argv[]){
     srand(time(NULL));
-    if(argc<3){
-        printf("Give me the argument for the n and the test flag. If you want to make a filtered test, then pass 1 as the second input. If you want the non filtered test, pass 0\n");
+    if(argc<5){
+        printf("Give me the argument for the n, the sparsity, the method and the test flag. If you want to make a filtered test, then pass 1 as the second input. If you want the non filtered test, pass 0\n");
         exit(-1);
     }
     int n=atoi(argv[1]);
-    int test_flag=atoi(argv[2]);
+    double sparsity;
+    sscanf(argv[2], "%lf", &sparsity);
+    char* method = argv[3];
+    int test_flag=atoi(argv[4]);
 
     /*Initialising the useful matrices*/
-    int* a=random_vector(n*n);          //The two operand matrices, in 1D array form
-    int* b=random_vector(n*n);
-    int* f=random_vector(n*n);          //the mask
+    int* a=random_vector(n*n, sparsity);          //The two operand matrices, in 1D array form
+    int* b=random_vector(n*n, sparsity);
+    int* f=random_vector(n*n, sparsity);          //the mask
     int* C_reconstructed;
     CSCMatrix A=array2CSC(a, n);         //The operand matrices, in CSC form
     CSCMatrix B=array2CSC(b, n);
@@ -29,14 +32,16 @@ int main(int argc, char* argv[]){
     /*Finished initialising*/
 
     /*Doing the Calculations with the CSC matrices*/
-    if(test_flag==1){
+    C = bmm(&A, &B, &F, method, test_flag, -1);
+    C_reconstructed=CSC2array(*C);
+    /*if(test_flag==1){
         C=bmm_dsf(&A,&B,&F);                    //The result of the CSC matrix multiplication with the filter, (the function is written in csc.h)
         C_reconstructed=CSC2array(*C);        //The convertion of the CSC result to a 1D array, so we can make the test.
     }
     else{
         C=bmm_ds(&A,&B);                    //The result of the CSC matrix multiplication, (the function is written in csc.h)
         C_reconstructed=CSC2array(*C);        //The convertion of the CSC result to a 1D array, so we can make the test.
-    }
+    }*/
     /*Finished with the CSC*/
 
    

@@ -14,7 +14,7 @@ int main(int argc, char* argv[]){
     int n=atoi(argv[1]);
 
     /*Creating the x array, getting the equivalent CSC struct, and then converting this as well*/
-    int* x=random_vector(n*n);      //The initial array
+    int* x=random_vector(n*n, 0.9);      //The initial array
     CSCMatrix shit=array2CSC(x, n);   //The CSC struct we get 
     int * y= CSC2array(shit);     //The final array we get, after converting the converted one 
     /*Finished with the convertions*/

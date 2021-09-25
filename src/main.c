@@ -38,11 +38,18 @@ int main(int argc, char** argv) {
         }
     }
 
-    CSCMatrix* A = CSCfromMM(afile);
-    CSCMatrix* B = CSCfromMM(bfile);
+    CSCMatrix* A = CSCfromMM(afile);\
+    int asameasb; // if A and B are the same matrix, we do not need to allocate more space
+    if (strcmp(afile, bfile) == 0) asameasb = 1;
+    CSCMatrix* B;
+    if (asameasb) {
+        B = A;
+    } else {
+        B = CSCfromMM(bfile);
+    }
     CSCMatrix* C;
     CSCMatrix* F = NULL;
-    printf("f %s\n", ffile);
+    printf("f file: %s\n", ffile);
     if (ffile)
         F = CSCfromMM(ffile);
 
@@ -51,11 +58,11 @@ int main(int argc, char** argv) {
     clock_gettime(CLOCK_MONOTONIC, &ts_start);
 
     // BMM (TODO: configure MPI when needed)
-    //C = bmm(A, B, F, method, F != NULL);
-    printf("A->n: %d\n", A->n);
+    C = bmm(A, B, F, method, F != NULL, -1);
+    /*printf("A->n: %d\n", A->n);
     int k = sqrt(A->n);
     int b = 120;
-    block_CSC(A, k);
+    block_CSC(A, k);*/
 
     // timing end
     struct timespec ts_end;
@@ -75,8 +82,8 @@ int main(int argc, char** argv) {
     printf("BMM duration: %lf seconds\n", dur_d);
 
     CSCMatrixfree(A);
-    CSCMatrixfree(B);
-    //CSCMatrixfree(C);
+    if (!asameasb) CSCMatrixfree(B);
+    CSCMatrixfree(C);
     if (ffile)
         CSCMatrixfree(F);
 }
