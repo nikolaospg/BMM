@@ -30,7 +30,7 @@ void print_vector2D(int* vector, int rows, int cols){
  * input: The size of the vector
  * sparsity: The sparsity of the vector. Each element will have a sparsity chance of being a zero
  * returns the pointer.*/
-int* random_vector(int size, int sparsity){
+int* random_vector(int size, double sparsity){
     int* ret=(int*)malloc(size*sizeof(int*));
     if(ret==NULL){
         printf("Could not allocate memory in random_vector function. Exiting\n");
@@ -47,6 +47,7 @@ int* random_vector(int size, int sparsity){
             ret[i]=0;
         }
     }   
+
     return ret;
 }
 

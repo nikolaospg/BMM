@@ -689,10 +689,10 @@ CSCMatrix* bmm_ss(CSCMatrix* A, CSCMatrix* B) {
 
     int nnz = 0;
     for(int i = 0; i < n; i++){
-        for(int kk = A->col_ptr[i]; kk < A->col_ptr[i+1]; kk++){
-            int k = A->row_idx[kk];
-            for(int jj = B->col_ptr[k]; jj < B->col_ptr[k+1]; jj++){
-                int j = B->row_idx[jj];
+        for(int kk = B->col_ptr[i]; kk < B->col_ptr[i+1]; kk++){
+            int k = B->row_idx[kk];
+            for(int jj = A->col_ptr[k]; jj < A->col_ptr[k+1]; jj++){
+                int j = A->row_idx[jj];
                 if(mask[j] != i){
                     mask[j] = i;
                     if (nnz >= row_idx_capacity) { // double row_idx capacity
