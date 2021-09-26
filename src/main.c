@@ -38,9 +38,11 @@ int main(int argc, char** argv) {
         }
     }
 
-    CSCMatrix* A = CSCfromMM(afile);\
-    int asameasb; // if A and B are the same matrix, we do not need to allocate more space
-    if (strcmp(afile, bfile) == 0) asameasb = 1;
+    CSCMatrix* A = CSCfromMM(afile);
+    // if files are the same, do not load matrices multiple times to save RAM and time
+    int asameasb = strcmp(afile, bfile) == 0;
+    int fsameasa = ffile != NULL && strcmp(ffile, afile) == 0;
+    int fsameasb = ffile != NULL && strcmp(ffile, bfile) == 0;
     CSCMatrix* B;
     if (asameasb) {
         B = A;
@@ -50,8 +52,15 @@ int main(int argc, char** argv) {
     CSCMatrix* C;
     CSCMatrix* F = NULL;
     printf("f file: %s\n", ffile);
-    if (ffile)
-        F = CSCfromMM(ffile);
+    if (ffile) {
+        if (fsameasa) {
+            F = A;
+        } else if (fsameasb) {
+            F = B;
+        } else {
+            F = CSCfromMM(ffile);
+        }
+    }
 
     // timing start
     struct timespec ts_start;
@@ -63,6 +72,7 @@ int main(int argc, char** argv) {
     int k = sqrt(A->n);
     int b = 120;
     block_CSC(A, k);*/
+    printf("bmmd\n");
 
     // timing end
     struct timespec ts_end;
@@ -84,6 +94,6 @@ int main(int argc, char** argv) {
     CSCMatrixfree(A);
     if (!asameasb) CSCMatrixfree(B);
     CSCMatrixfree(C);
-    if (ffile)
+    if (ffile && !(fsameasa || fsameasb))
         CSCMatrixfree(F);
 }

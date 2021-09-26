@@ -89,6 +89,9 @@ int main(int argc, char* argv[]){
     for(int i=0; i<n*n; i++){
         if(c[i]!=C_reconstructed[i]){
             printf("\nFor i=%d,c=%d and C=%d (C is the CSC mult. result). Error on product_test!\n",i, c[i], C_reconstructed[i]);
+            print_vector2D(c, n, n);
+            printf("\n");
+            print_vector2D(C_reconstructed, n, n);
             exit(-1);
         }
     

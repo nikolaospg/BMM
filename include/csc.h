@@ -682,29 +682,29 @@ CSCMatrix* bmm_ss(CSCMatrix* A, CSCMatrix* B) {
     int row_idx_capacity = B->n;
     C->row_idx = (int*) malloc(row_idx_capacity*sizeof(int));
 
-    // used to not count multiple NZ per inner product
+    // used to not count multiple NZ per inner product index match
     int* mask = (int*) malloc(n*sizeof(int));
     for (int i = 0; i < n; i++) mask[i] = -1;
     C->col_ptr[0] = 0;
 
     int nnz = 0;
-    for(int i = 0; i < n; i++){
-        for(int kk = B->col_ptr[i]; kk < B->col_ptr[i+1]; kk++){
+    for(int j = 0; j < n; j++){
+        for(int kk = B->col_ptr[j]; kk < B->col_ptr[j+1]; kk++){
             int k = B->row_idx[kk];
-            for(int jj = A->col_ptr[k]; jj < A->col_ptr[k+1]; jj++){
-                int j = A->row_idx[jj];
-                if(mask[j] != i){
-                    mask[j] = i;
+            for(int ii = A->col_ptr[k]; ii < A->col_ptr[k+1]; ii++){
+                int i = A->row_idx[ii];
+                if(mask[i] != j){
+                    mask[i] = j;
                     if (nnz >= row_idx_capacity) { // double row_idx capacity
                         row_idx_capacity *=2;
                         C->row_idx = realloc(C->row_idx, row_idx_capacity*sizeof(int));
                     }
-                    C->row_idx[nnz] = j;
+                    C->row_idx[nnz] = i;
                     nnz++;
                 }
             }
         }         
-        C->col_ptr[i+1] = nnz;
+        C->col_ptr[j+1] = nnz;
     }
 
     C->row_idx = realloc(C->row_idx, nnz*sizeof(int));
@@ -712,14 +712,51 @@ CSCMatrix* bmm_ss(CSCMatrix* A, CSCMatrix* B) {
 }
 
 /**
- * BMM using SMMP algorithm for multiplication
+ * BMM using SMMP algorithm for multiplication, with filter
  * https://www.researchgate.net/publication/2364309_Sparse_Matrix_Multiplication_Package_SMMP
- * Complexity: O(n*K^2) where K is the maximum nnz per column
+ * Complexity: O(n*K^3) where K is the maximum nnz per column
  * Also uses O(n) space
  */
 CSCMatrix* bmm_ssf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F) {
-    printf("TODO: implement ssf\n");
-    return bmm_ss(A, B);
+    int n = B->n;
+    CSCMatrix* C = (CSCMatrix*) malloc(sizeof(CSCMatrix));
+    C->n = n;
+    C->col_ptr = (int*) malloc((n+1)*sizeof(int));
+
+    // guess C's row_idx capacity
+    int row_idx_capacity = B->n;
+    C->row_idx = (int*) malloc(row_idx_capacity*sizeof(int));
+
+    // used to not count multiple NZ per inner product index match
+    int* mask = (int*) malloc(n*sizeof(int));
+    for (int i = 0; i < n; i++) mask[i] = -1;
+    C->col_ptr[0] = 0;
+
+    int nnz = 0;
+    for(int j = 0; j < n; j++){
+        for(int kk = B->col_ptr[j]; kk < B->col_ptr[j+1]; kk++){
+            int k = B->row_idx[kk];
+            for(int ii = A->col_ptr[k]; ii < A->col_ptr[k+1]; ii++){
+                int i = A->row_idx[ii];
+                for(int ll = F->col_ptr[j]; ll < F->col_ptr[j+1]; ll++){
+                    int l = F->row_idx[ll];
+                    if(l == i && mask[i] != j){
+                        mask[i] = j;
+                        if (nnz >= row_idx_capacity) { // double row_idx capacity
+                            row_idx_capacity *=2;
+                            C->row_idx = realloc(C->row_idx, row_idx_capacity*sizeof(int));
+                        }
+                        C->row_idx[nnz] = i;
+                        nnz++;
+                    }
+                }
+            }
+        }         
+        C->col_ptr[j+1] = nnz;
+    }
+
+    C->row_idx = realloc(C->row_idx, nnz*sizeof(int));
+    return C;
 }
 
 /**
