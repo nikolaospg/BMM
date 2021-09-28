@@ -8,6 +8,8 @@
 #include "utils.h"
 #include "mmio.h"
 
+#include <omp.h>
+
 
 /** 
  * Defining a Struct, which resembles the CSC data structure 
@@ -706,6 +708,7 @@ CSCMatrix* bmm_ss(CSCMatrix* A, CSCMatrix* B) {
         }         
         C->col_ptr[j+1] = nnz;
     }
+    free(mask);
 
     C->row_idx = realloc(C->row_idx, nnz*sizeof(int));
     return C;
@@ -754,8 +757,61 @@ CSCMatrix* bmm_ssf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F) {
         }         
         C->col_ptr[j+1] = nnz;
     }
+    free(mask);
 
     C->row_idx = realloc(C->row_idx, nnz*sizeof(int));
+    return C;
+}
+
+/**
+ * BMM using SMMP algorithm, parallel version
+ * https://www.researchgate.net/publication/2364309_Sparse_Matrix_Multiplication_Package_SMMP
+ * Complexity: O(n*K^2) where K is the maximum nnz per column
+ * Also uses O(n) space
+ */
+CSCMatrix* bmm_sp(CSCMatrix* A, CSCMatrix* B) {
+    int n = B->n;
+    CSCMatrix* C = (CSCMatrix*) malloc(sizeof(CSCMatrix));
+    C->n = n;
+    C->col_ptr = (int*) malloc((n+1)*sizeof(int));
+
+    // used to not count multiple NZ per inner product index match
+    int* mask = (int*) malloc(n*sizeof(int));
+    #pragma omp parallel for
+    for (int i = 0; i < n; i++) mask[i] = -1;
+    C->col_ptr[0] = 0;
+
+    int nnz = 0;
+    for(int j = 0; j < n; j++){
+        for(int kk = B->col_ptr[j]; kk < B->col_ptr[j+1]; kk++){
+            int k = B->row_idx[kk];
+            for(int ii = A->col_ptr[k]; ii < A->col_ptr[k+1]; ii++){
+                int i = A->row_idx[ii];
+                if(mask[i] != j){
+                    mask[i] = j;
+                    nnz++;
+                }
+            }
+        }         
+        C->col_ptr[j+1] = nnz;
+    }
+    C->row_idx = (int*) malloc(nnz*sizeof(int));
+
+    // in the second pass, mask holds the NNZ per column
+    #pragma omp parallel for
+    for (int j = 0; j < n; j++) {
+        mask[j] = C->col_ptr[j];
+        for(int kk = B->col_ptr[j]; kk < B->col_ptr[j+1]; kk++){
+            int k = B->row_idx[kk];
+            for(int ii = A->col_ptr[k]; ii < A->col_ptr[k+1]; ii++){
+                int i = A->row_idx[ii];
+                C->row_idx[mask[j]] = i;
+                mask[j]++;
+            }
+        }         
+    }
+
+    free(mask);
     return C;
 }
 
@@ -810,6 +866,13 @@ CSCMatrix* bmm(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, char* method, int filte
             return bmm_ssf(A, B, F);
         } else {
             return bmm_ss(A, B);
+        }
+    } else if (strcmp(method, "sp") == 0) {
+        if (filter) {
+            //return bmm_spf(A, B, F);
+            return NULL;
+        } else {
+            return bmm_sp(A, B);
         }
     } else {
         fprintf(stderr, "Unknown method, %s, aborting\n", method);
