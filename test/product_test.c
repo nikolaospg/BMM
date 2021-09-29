@@ -52,13 +52,13 @@ int main(int argc, char* argv[]){
         int count=0;
         for(int i=0; i<n; i++){
             for(int j=0; j<n; j++){
+                count=0;
                 if(f[i*n+j]!=0){
-                    count=0;
                     for(int k=0; k<n; k++){
                         count=count+ a[i*n+k]*b[j+k*n];
                     }
-                    c[i*n+j]=count;
                 }
+                c[i*n+j]=count;
             }
         }
     }
@@ -88,9 +88,21 @@ int main(int argc, char* argv[]){
     //c[5]=-1;    
     for(int i=0; i<n*n; i++){
         if(c[i]!=C_reconstructed[i]){
-            printf("\nFor i=%d,c=%d and C=%d (C is the CSC mult. result). Error on product_test!\n",i, c[i], C_reconstructed[i]);
-            print_vector2D(c, n, n);
+            printf("Fail on test: ");
+            for (int j = 0; j < argc; j++) {
+                printf("%s ", argv[j]);
+            }
             printf("\n");
+            printf("\nFor i=%d,c=%d and C=%d (C is the CSC mult. result). Error on product_test!\n",i, c[i], C_reconstructed[i]);
+            printf("Matrix A\n");
+            print_vector2D(a, n, n);
+            printf("Matrix B\n");
+            print_vector2D(b, n, n);
+            printf("Matrix F\n");
+            print_vector2D(f, n, n);
+            printf("Matrix C (dense product)\n");
+            print_vector2D(c, n, n);
+            printf("Matrix C (tested method)\n");
             print_vector2D(C_reconstructed, n, n);
             exit(-1);
         }
@@ -108,6 +120,7 @@ int main(int argc, char* argv[]){
     CSCMatrixfree(&B);
     CSCMatrixfree(&F);
     CSCMatrixfree(C);
+    free(C);
 
     return 0;
 
