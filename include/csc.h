@@ -797,21 +797,38 @@ CSCMatrix* bmm_sp(CSCMatrix* A, CSCMatrix* B) {
     }
     C->row_idx = (int*) malloc(nnz*sizeof(int));
 
-    // in the second pass, mask holds the NNZ per column
+    // in the second pass, col_nnz holds the NNZ per column
+    int* col_nnz = (int*) malloc(n*sizeof(int));
+    // locks that protect mask array
+    omp_lock_t* mask_lock = (omp_lock_t*) malloc(n*sizeof(omp_lock_t));
     #pragma omp parallel for
+    for (int i = 0; i < n; i++) {
+        col_nnz[i] = C->col_ptr[i];
+        mask[i] = -1;
+        omp_init_lock(&mask_lock[i]);
+    }
+    //#pragma omp parallel for shared(mask, mask_lock) default(none)
     for (int j = 0; j < n; j++) {
-        mask[j] = C->col_ptr[j];
         for(int kk = B->col_ptr[j]; kk < B->col_ptr[j+1]; kk++){
             int k = B->row_idx[kk];
             for(int ii = A->col_ptr[k]; ii < A->col_ptr[k+1]; ii++){
                 int i = A->row_idx[ii];
-                C->row_idx[mask[j]] = i;
-                mask[j]++;
+                omp_set_lock(&mask_lock[i]);
+                if (mask[i] != j) {
+                    mask[i] = j;
+                    C->row_idx[col_nnz[j]] = i;
+                    col_nnz[j]++;
+                }
+                omp_unset_lock(&mask_lock[i]);
             }
         }         
     }
 
+    #pragma omp parallel for
+    for (int i = 0; i < n; i++) omp_destroy_lock(&mask_lock[i]);
+    free(mask_lock);
     free(mask);
+    free(col_nnz);
     return C;
 }
 
