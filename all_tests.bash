@@ -12,6 +12,7 @@ do
   ./bin/product_test 500 0.9 ss 0
   ./bin/product_test 500 0.9 ss 1
   ./bin/product_test 500 0.9 sp 0
+  ./bin/product_test 50 0.9 bs 0 25
   ./bin/conversion_test 500
   ./bin/blocking_test 500 20
   echo "Iteration $i Complete - No Errors"

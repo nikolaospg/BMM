@@ -13,6 +13,8 @@ int main(int argc, char* argv[]){
     sscanf(argv[2], "%lf", &sparsity);
     char* method = argv[3];
     int test_flag=atoi(argv[4]);
+    int bsize = -1;
+    if (argc > 5) bsize = atoi(argv[5]);
 
     /*Initialising the useful matrices*/
     int* a=random_vector(n*n, sparsity);          //The two operand matrices, in 1D array form
@@ -32,7 +34,7 @@ int main(int argc, char* argv[]){
     /*Finished initialising*/
 
     /*Doing the Calculations with the CSC matrices*/
-    C = bmm(&A, &B, &F, method, test_flag, -1);
+    C = bmm(&A, &B, &F, method, test_flag, bsize);
     C_reconstructed=CSC2array(*C);
     /*if(test_flag==1){
         C=bmm_dsf(&A,&B,&F);                    //The result of the CSC matrix multiplication with the filter, (the function is written in csc.h)
@@ -98,8 +100,10 @@ int main(int argc, char* argv[]){
             print_vector2D(a, n, n);
             printf("Matrix B\n");
             print_vector2D(b, n, n);
-            printf("Matrix F\n");
-            print_vector2D(f, n, n);
+            if (test_flag) {
+                printf("Matrix F\n");
+                print_vector2D(f, n, n);
+            }
             printf("Matrix C (dense product)\n");
             print_vector2D(c, n, n);
             printf("Matrix C (tested method)\n");
