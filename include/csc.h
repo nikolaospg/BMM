@@ -1041,6 +1041,7 @@ CSCMatrix* bmm_bsf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, int b) {
         printf("could not allocate memory in block_CSC function for the CSCMatrix** blocked, exiting\n");
         exit(-1);
     }
+    #pragma omp parallel for schedule(static) collapse(2)
     for (int p = 0; p < n_b; p++) {
         for (int q = 0; q < n_b; q++) {
             int blockc_idx = p*n_b+q;
