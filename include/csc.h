@@ -551,6 +551,126 @@ CSCMatrixBlocked* fast_block_CSC(CSCMatrix* A, int b){
     return ret;
 }
 
+//This works with a way equivalent to fast_block_CSC, but creates a CSCMatrixBlocked struct which has the row_idx and the col_ptr of each block in a column major
+//way. This is done because the B matrix might be needed to work this way.
+CSCMatrixBlocked* fast_block_CSC_cols(CSCMatrix* A, int b){
+
+    struct timespec ts_start2;
+    clock_gettime(CLOCK_MONOTONIC, &ts_start2);
+
+    //Useful variables
+    int nb=ceil(A->n/((double) b));
+    int n=A->n;
+    int* col_ptr=A->col_ptr;
+    int nnz=col_ptr[n];
+    int* row_idx=A->row_idx;
+    int current_block_col;
+    int current_block_row;
+    int current_row;
+    int access_index;                   //I use this variable to help me access(index) some arrays with the proper way
+    int help_variable=(b+1)*nb;         //This is used on some products many times
+    //Finished with useful variables
+
+
+    //Now Allocating Memory For the arrays used in the CSCMatrixBlocked struct
+    int* row_idx_combined=(int*)calloc(nnz, sizeof(int));             
+    int* col_ptr_combined=(int*)calloc(nb*nb*(b+1), sizeof(int));       
+    int* row_idx_indices= (int*)calloc(nb*nb +1, sizeof(int));
+    int* col_ptr_indices= (int*)calloc(nb*nb +1, sizeof(int));
+
+    if(row_idx_combined==NULL || col_ptr_combined ==NULL || row_idx_indices==NULL ||  col_ptr_indices==NULL){
+        printf("Could not allocate memory in fast_block_CSC, exiting\n");
+        exit(-1);
+    }
+    //Finished allocating memory
+
+
+    //The following double for loop takes every non zero element of the CSCMatrix A, finds the block column and the block row of the element
+    //and uses this info to initialise the values of the col_ptr_combined and the row_idx_indices arrays. These 2 now show the data in a non
+    //cumulative way, in another loop later on they are changed so that they show the data in a cumulative way
+    for(int col=0; col<n; col++){
+        current_block_col=col/b;
+        for (int index=col_ptr[col]; index<col_ptr[col+1]; index++ ){
+            current_row=row_idx[index];
+            current_block_row=current_row/b;
+            //access_index=current_block_row*help_variable + current_block_col +col; 
+            access_index=current_block_col*help_variable + current_block_row*(b+1) +col%b;              //EDO ALLAKSA
+
+            col_ptr_combined[access_index+1]++;
+            //row_idx_indices[current_block_row*nb + current_block_col +1]++;
+            row_idx_indices[current_block_col*nb + current_block_row +1]++;                             //EDO ALLAKSA
+        }
+    }
+    //The following loop is used so that the col_ptr_combined shows the data in a cumulative way, as usual on the CSC scheme.
+    for(int i=0; i<nb; i++){
+        for(int j=0; j<nb; j++){
+            access_index=i*help_variable + j*(b+1) +1;
+            for(int k=1; k<b+1; k++){
+                col_ptr_combined[access_index]=col_ptr_combined[access_index] + col_ptr_combined[access_index-1];
+                access_index++;
+            }
+        }
+    }
+    
+    //The following for loop is used so that the row_idx_indices shows the data in a cumulative way, and also fills up the col_ptr_indices values
+    access_index=b+1;
+    for(int i=1; i<nb*nb +1; i++){
+        row_idx_indices[i]=row_idx_indices[i]+row_idx_indices[i-1];
+        col_ptr_indices[i]=access_index;
+        access_index=access_index+b+1;
+    }
+
+    //Accesing every non zero element to fill up the row_idx_combined array.
+    int* count_array=(int*)calloc(nb*nb,sizeof(int));   //This is used so that I know how many elements I have stored on each block whenever needed.
+    int offset;                                         //Another variable used to help me index the arrays
+    for(int col=0; col<n; col++){
+        current_block_col=col/b;
+        for (int index=col_ptr[col]; index<col_ptr[col+1]; index++ ){
+            current_row=row_idx[index];
+            current_block_row=current_row/b;
+            //access_index=current_block_row*nb + current_block_col;
+            access_index=current_block_col*nb + current_block_row;
+            offset=row_idx_indices[access_index] + count_array[access_index];
+            row_idx_combined[offset]=current_row%b;
+            count_array[access_index]++;
+        }
+    }
+    free(count_array);
+    //Finished with this too
+
+    //Creating the CSCMatrixBlocked struct to be returned. For the explanation of what the members of the struct are, read the comments on the type definition
+    CSCMatrixBlocked* ret=(CSCMatrixBlocked*)malloc(sizeof(CSCMatrixBlocked));
+    ret->b=b;
+    ret->nb=nb;
+    ret->nnz=nnz;
+    ret->n=n;
+    ret->row_idx_combined=row_idx_combined;
+    ret->row_idx_indices=row_idx_indices;
+    ret->col_ptr_combined=col_ptr_combined;
+    ret->col_ptr_indices=col_ptr_indices;
+    //Finished creating the struct to be returned
+    
+    //Printing the time needed
+    struct timespec ts_end2;
+    struct timespec duration2;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts_end2);
+    duration2.tv_sec = ts_end2.tv_sec - ts_start2.tv_sec;
+    duration2.tv_nsec = ts_end2.tv_nsec - ts_start2.tv_nsec;
+    while (duration2.tv_nsec > 1000000000) {
+        duration2.tv_sec++;
+        duration2.tv_nsec -= 1000000000;
+    }
+    while (duration2.tv_nsec < 0) {
+        duration2.tv_sec--;
+        duration2.tv_nsec += 1000000000;
+    }
+    double dur_d2 = duration2.tv_sec + duration2.tv_nsec/1000000000.0;
+    printf("\nDuration of fast block CSC Cols: %lf seconds\n\n", dur_d2);
+    //Finished printing
+
+    return ret;
+}
 
 /**
  *  The Following function helps us in the task of reconstructing one Matrix (CSC Form) from a blocked version of the same matrix

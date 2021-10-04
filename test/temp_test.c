@@ -81,6 +81,60 @@ void compare_reconstruct_functions(CSCMatrix* fast, CSCMatrix* first){
 
 }
 
+//This function compares the fast_block_CSC with the fast_block_CSC_cols function.
+void compare_cols_rows(CSCMatrixBlocked* row_major, CSCMatrixBlocked* col_major){
+
+    //Initialising useful variables
+    int b=row_major->b;
+    int current_non_zeros;
+    int* row_major_row_idx;
+    int* row_major_col_ptr;
+
+    int* col_major_row_idx;
+    int* col_major_col_ptr;
+    int nb=row_major->nb;
+    //Finished initialing the variables
+
+    //Each i iteration corresponds to one row of the row major/ one col of the col major
+    for(int i=0; i<nb; i++){
+        //Each j iteration corresponds to one col of the row major/one row of the col major
+        //The (i,j) block of the row major should be equal to the (j,i) block of the column major
+        for(int j=0; j<nb; j++){
+
+            //Accessing the row_idx and the col_ptr of the two CSCMatrixBlocked structs
+            row_major_row_idx=row_major->row_idx_combined + row_major->row_idx_indices[i*nb + j];
+            col_major_row_idx=col_major->row_idx_combined + col_major->row_idx_indices[j*nb + i];
+
+            row_major_col_ptr=row_major->col_ptr_combined + row_major->col_ptr_indices[i*nb + j];
+            col_major_col_ptr=col_major->col_ptr_combined + col_major->col_ptr_indices[j*nb + i];
+
+            //Comparing the col_ptr
+            for(int col_index=0; col_index<b+1; col_index++){
+                //row_major_col_ptr[col_index]=-1;                  //Uncomment to deliberately create an error
+                if( row_major_col_ptr[col_index] != col_major_col_ptr[col_index]){
+                    printf("ERROR on compare_cols_rows on the col_ptr comparison i=%d j=%d col_index=%d, row_major_col_ptr=%d col_major_col_ptr=%d\n",i,j,col_index, row_major_col_ptr[col_index], col_major_col_ptr[col_index]);
+                    exit(-1);
+                }
+            }
+
+            //Comparing the row_idx
+            current_non_zeros=row_major_col_ptr[b];
+            for(int row_index=0; row_index<current_non_zeros; row_index++){
+                //row_major_row_idx[row_index]=-1;                  //Uncomment to deliberately create an error
+                if( row_major_row_idx[row_index] != col_major_row_idx[row_index]){
+                    printf("ERROR on compare_cols_rows on the row_index comparison i=%d j=%d row_index=%d, row_major_row_idx=%d col_major_row_idx=%d\n",i,j,row_index, row_major_row_idx[row_index], col_major_row_idx[row_index]);
+                    //exit(-1);
+                }
+            }
+
+
+
+        }
+    }
+
+
+}
+
 
 int main(int argc, char* argv[]){
 
@@ -96,19 +150,35 @@ int main(int argc, char* argv[]){
     int* x=random_vector(n*n, 0.9);      //Creating some random x vector
     CSCMatrix A=array2CSC(x,n);     //Getting the CSC form 
 
+    //Comparing the block_CSC with the fast_block_CSC to see whether the fast_block_CSC is ok
     CSCMatrix** A2=block_CSC(&A, b);
     CSCMatrixBlocked* A1=fast_block_CSC(&A, b);
-
     compare_block_functions(A1,A2);
-    //Finished initialising variables
+    //Finished comparing the block functions
 
+
+    //Comparing the two reconstruct functions, to see whether the fast_reconstruct_from_blocks is ok
     CSCMatrix* first=reconstruct_from_blocks(A2, A1->nb, n);
     CSCMatrix* fast=fast_reconstruct_from_blocks(A1);
     compare_reconstruct_functions(fast, first);
+    //Finished comparing the reconstruct functions
 
-   
+    //Comparing the fast_block_CSC with the fast_block_CSC_cols to see whether the fast_block_CSC_cols is ok
+    CSCMatrixBlocked* row_major=fast_block_CSC(&A, b);
+    CSCMatrixBlocked* col_major=fast_block_CSC_cols(&A, b);
+    compare_cols_rows(row_major, col_major);
+    //Finished comparing the fast_block_CSC with the fast_block_CSC_cols
+
+
+    free(x);
     ArrayCSCMatrixfree(A2, A1->nb);
     CSCMatrixBlocked_free(A1);
+    CSCMatrixfree(first);
+    CSCMatrixfree(fast);
+    CSCMatrixBlocked_free(row_major);
+    CSCMatrixBlocked_free(col_major);
+    free(first);
+    free(fast);
     free(A.col_ptr);
     free(A.row_idx);
 
