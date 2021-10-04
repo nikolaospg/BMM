@@ -436,6 +436,7 @@ CSCMatrix** block_CSC(CSCMatrix* A, int b){
     return blocked;
 }
 
+//Fast version of the blocking. It returns a CSCMatrixBlocked struct
 CSCMatrixBlocked* fast_block_CSC(CSCMatrix* A, int b){
 
 
@@ -563,6 +564,11 @@ CSCMatrixBlocked* fast_block_CSC(CSCMatrix* A, int b){
  * */
 CSCMatrix* reconstruct_from_blocks(CSCMatrix** blocked, int nb, int n){
 
+
+    struct timespec ts_start2;
+    clock_gettime(CLOCK_MONOTONIC, &ts_start2);
+
+
     /*Initialising useful variables*/
     int b=blocked[0]->n;
     int total_nz=0;
@@ -639,9 +645,128 @@ CSCMatrix* reconstruct_from_blocks(CSCMatrix** blocked, int nb, int n){
     }
     /*Finished with the reconstructing task*/
     
+    //Printing the time needed
+    struct timespec ts_end2;
+    struct timespec duration2;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts_end2);
+    duration2.tv_sec = ts_end2.tv_sec - ts_start2.tv_sec;
+    duration2.tv_nsec = ts_end2.tv_nsec - ts_start2.tv_nsec;
+    while (duration2.tv_nsec > 1000000000) {
+        duration2.tv_sec++;
+        duration2.tv_nsec -= 1000000000;
+    }
+    while (duration2.tv_nsec < 0) {
+        duration2.tv_sec--;
+        duration2.tv_nsec += 1000000000;
+    }
+    double dur_d2 = duration2.tv_sec + duration2.tv_nsec/1000000000.0;
+    printf("\nDuration of reconstruct from blocks: %lf seconds\n\n", dur_d2);
+
+
     return original;
 
 }
+
+//This is an early version of a function which reconstructs a CSC matrix from the CSCMatrixBlocked struct.
+//It should require further optimisation
+CSCMatrix* fast_reconstruct_from_blocks(CSCMatrixBlocked* A){
+
+
+    struct timespec ts_start2;
+    clock_gettime(CLOCK_MONOTONIC, &ts_start2);
+
+    //Useful variables
+    int n=A->n;
+    int total_nz=A->nnz;
+    int nb=A->nb;
+    int b=A->b;
+    int column_offset;
+    int row_count;
+    int block_col;
+    int relative_col;
+    int current_nz;
+    int current_relative_row;
+
+    int* current_rox_idx;
+    int* current_col_ptr;
+
+    //Initialising the original matrix and allocating memory
+    CSCMatrix* original=(CSCMatrix*)malloc(sizeof(CSCMatrix));
+    if(original==NULL){
+        printf("On reconstruct_from_blocks could not allocate memory for original!, error\n");
+        exit(-1);
+    }
+
+    original->col_ptr=(int*)malloc((n+1)*sizeof(int));
+    if(original->col_ptr==NULL){
+        printf("On reconstruct_from_blocks could not allocate memory for original->col_ptr!, error\n");
+        exit(-1);
+    }
+    original->col_ptr[0]=0;
+
+
+    original->row_idx=(int*)malloc((total_nz)*sizeof(int));
+    if(original->row_idx==NULL){
+        printf("On reconstruct_from_blocks could not allocate memory for original->col_ptr!, error\n");
+        exit(-1);
+    }
+
+    original->n=n;
+    //Finished initialising memory for the original matrix
+
+    //Each col_index iteration of the following loop corresponds to one of the n columns of the reconstructed matrix
+    for(int col_index=0; col_index<n; col_index++){
+        column_offset=original->col_ptr[col_index];
+        row_count=0;                            //This is set=0 for each new column we study
+
+        //Each block row iteration of the following loop corresponds to one of the nb blocks in this specific column
+        for(int block_row=0; block_row<nb; block_row++){
+            block_col=col_index/b;                              //In which one of the nb BLOCK COLUMNS the current block belongs to.
+
+            current_col_ptr=A->col_ptr_combined + A->col_ptr_indices[block_col+ block_row*nb];
+            current_rox_idx=A->row_idx_combined + A->row_idx_indices[block_col+ block_row*nb];
+
+            relative_col=col_index%b;
+            current_nz=current_col_ptr[relative_col+1]- current_col_ptr[relative_col];        //The non zero elements in this column of the block (to be stored in the reconstructed)
+
+            original->col_ptr[col_index+1]=original->col_ptr[col_index+1] +current_nz;      //Increasing the value of the col_index vector
+
+            //Each i iteration of the following loop corresponds to one non zero element of the current column of the current block
+            for(int i=0; i<current_nz; i++){
+                current_relative_row=current_rox_idx[current_col_ptr[relative_col]+i];
+                original->row_idx[column_offset+row_count]=block_row*b + current_relative_row;
+                row_count=row_count+1;
+            }
+        }
+        original->col_ptr[col_index+1]=original->col_ptr[col_index]+row_count;
+
+    }
+
+
+    //Printing the time needed
+    struct timespec ts_end2;
+    struct timespec duration2;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts_end2);
+    duration2.tv_sec = ts_end2.tv_sec - ts_start2.tv_sec;
+    duration2.tv_nsec = ts_end2.tv_nsec - ts_start2.tv_nsec;
+    while (duration2.tv_nsec > 1000000000) {
+        duration2.tv_sec++;
+        duration2.tv_nsec -= 1000000000;
+    }
+    while (duration2.tv_nsec < 0) {
+        duration2.tv_sec--;
+        duration2.tv_nsec += 1000000000;
+    }
+    double dur_d2 = duration2.tv_sec + duration2.tv_nsec/1000000000.0;
+    printf("\nDuration of fast reconstruct from blocks: %lf seconds\n\n", dur_d2);
+
+    return original;
+}
+
+
+
 
 /*Searches for the element (row,col) in the A array. If it exists (is equal to 1), it returns 1 , else it returns 0
  *  inputs: The CSCMatrix struct A

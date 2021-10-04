@@ -52,6 +52,35 @@ void compare_block_functions(CSCMatrixBlocked* A1, CSCMatrix** A2){
 
 }
 
+//This function compares the two reconstruct functions.
+void compare_reconstruct_functions(CSCMatrix* fast, CSCMatrix* first){
+
+    //Comparing the n
+    if(fast->n!=first->n){
+        printf("Different n! exiting\n");
+        exit(-1);
+    }
+
+    
+    for(int i=0; i<first->col_ptr[fast->n]; i++){
+        //fast->row_idx[i]=-1;        //Uncomment to deliberately create an error
+        if(fast->row_idx[i] != first->row_idx[i]){
+            printf("Different row_idx[%d] on compare_reconstruct_functions! exiting\n",i);
+            exit(-1);
+        }
+    }
+
+    for(int i=0; i<first->n+1; i++){
+        //fast->col_ptr[i]=-1;        //Uncomment to deliberately create an error
+        if(fast->col_ptr[i] != first->col_ptr[i]){
+            printf("Different col_ptr[%d] on compare_reconstruct_functions! exiting\n",i);
+            exit(-1);
+        }
+    }
+
+
+}
+
 
 int main(int argc, char* argv[]){
 
@@ -65,7 +94,6 @@ int main(int argc, char* argv[]){
     }
 
     int* x=random_vector(n*n, 0.9);      //Creating some random x vector
-
     CSCMatrix A=array2CSC(x,n);     //Getting the CSC form 
 
     CSCMatrix** A2=block_CSC(&A, b);
@@ -74,10 +102,13 @@ int main(int argc, char* argv[]){
     compare_block_functions(A1,A2);
     //Finished initialising variables
 
+    CSCMatrix* first=reconstruct_from_blocks(A2, A1->nb, n);
+    CSCMatrix* fast=fast_reconstruct_from_blocks(A1);
+    compare_reconstruct_functions(fast, first);
+
    
     ArrayCSCMatrixfree(A2, A1->nb);
     CSCMatrixBlocked_free(A1);
-    free(x);
     free(A.col_ptr);
     free(A.row_idx);
 
