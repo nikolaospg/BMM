@@ -52,6 +52,49 @@ CSCMatrix* csc_copy(CSCMatrix* m) {
 }
 
 /**
+ * Converts CSC matrix to CSR
+ * https://github.com/scipy/scipy/blob/master/scipy/sparse/sparsetools/csr.h#L418
+ * O(nnz(A) + max(n_row,n_col))
+ */
+CSRMatrix* csc2csr(CSCMatrix* m) {
+    int nnz = m->col_ptr[m->n];
+    CSRMatrix* ret = malloc(sizeof(CSRMatrix));
+    ret->n = m->n;
+    ret->row_ptr = calloc(ret->n+1, sizeof(int));
+    ret->col_idx = malloc(nnz * sizeof(int));
+
+    for (int i = 0; i < nnz; i++)
+        ret->row_ptr[m->row_idx[i]]++;
+
+    //cumsum the nnz
+    for(int row = 0, cumsum = 0; row < ret->n; row++){
+        int temp  = ret->row_ptr[row];
+        ret->row_ptr[row] = cumsum;
+        cumsum += temp;
+    }
+    ret->row_ptr[ret->n] = nnz;
+
+    for(int col = 0; col < m->n; col++){
+        for(int jj = m->col_ptr[col]; jj < m->col_ptr[col+1]; jj++){
+            int row  = m->row_idx[jj];
+            int dest = ret->row_ptr[row];
+
+            ret->col_idx[dest] = col;
+
+            ret->row_ptr[row]++;
+        }
+    }
+
+    for(int row = 0, last = 0; row <= ret->n; row++){
+        int temp  = ret->row_ptr[row];
+        ret->row_ptr[row] = last;
+        last    = temp;
+    }
+
+    return ret;
+}
+
+/**
  * Frees the memory allocated by a CSCMatrix**. nb is the dimension of the CSCMatrix** (such that nb*nb is the total amount of elements of the CSCMatrix**)
  **/
 void ArrayCSCMatrixfree(CSCMatrix** arg, int nb){
@@ -131,6 +174,25 @@ int* CSC2array(CSCMatrix arg){
    return ret;
 }
 
+/*Function to convert a CSC structure to a row major array. Useful in validating the answers*/
+int* CSR2array(CSRMatrix arg){
+   /*Initialising useful variables and allocatin memory*/
+   int n=arg.n; 
+   int* ret=(int*)calloc(n*n,sizeof(int));
+   if(ret==NULL){
+       printf("could not allocate memory in CSC_convert function, exiting\n");
+       exit(-1);
+   }
+
+   for(int i=0; i<n; i++){
+       for(int jj=arg.row_ptr[i]; jj<arg.row_ptr[i+1]; jj++){
+           int j=arg.col_idx[jj];
+           ret[i*n+j]=1;
+       }
+   }
+   return ret;
+}
+
 /* square CSC to CSR matrix conversion 
    https://github.com/scipy/scipy/blob/3b36a574dc657d1ca116f6e230be694f3de31afc/scipy/sparse/sparsetools/csr.h#L376
 */
@@ -178,6 +240,15 @@ void print_csc(CSCMatrix* m) {
     print_vector(m->col_ptr, m->n+1);
     print_vector(m->row_idx, m->col_ptr[m->n]);
     int* arr = CSC2array(*m);
+    print_vector2D(arr, m->n, m->n);
+    free(arr);
+}
+
+void print_csr(CSRMatrix* m) {
+    printf("N: %d\n", m->n);
+    print_vector(m->row_ptr, m->n+1);
+    print_vector(m->col_idx, m->row_ptr[m->n]);
+    int* arr = CSR2array(*m);
     print_vector2D(arr, m->n, m->n);
     free(arr);
 }
@@ -552,14 +623,16 @@ int inner_product(CSCMatrix* A, CSCMatrix* B, int row, int col){
 }
 
 /**
- * sparse vector multiplication
+ * sparse vector multiplication. Assumes that indices are in ascending order
  */
-int spvm(int* vec1, int n1, int* vec2, int n2) {
-    int i=0, j=0;
-    while (i<n1 && j<n2) {
-        if (vec1[i] == vec2[j])
+int spvm(int* idx1, int begin1, int end1, int* idx2, int begin2, int end2) {
+    int i = begin1;
+    int j = begin2;
+    
+    while (i < end1 && j < end2) {
+        if (idx1[i] == idx2[j])
             return 1;
-        else if (vec1[i] < vec2[j])
+        else if (idx1[i] < idx2[j])
             i++;
         else
             j++;
@@ -805,6 +878,55 @@ CSCMatrix* bmm_ds(CSCMatrix* A, CSCMatrix* B){
     C->col_ptr = product_col_ptr;
     C->n = n;
 
+    return C;
+}
+
+CSCMatrix* bmm_cpf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F){
+    CSRMatrix* a_csr = csc2csr(A);
+    CSCMatrix* C = malloc(sizeof(CSCMatrix));
+    C->col_ptr = calloc((B->n+1), sizeof(int));
+    C->n = B->n;
+
+    #pragma omp parallel for
+    for (int j = 0; j < F->n; j++) {
+        for (int ii = F->col_ptr[j]; ii < F->col_ptr[j+1]; ii++) {
+            int i = F->row_idx[ii];
+            int elem = spvm(a_csr->col_idx, a_csr->row_ptr[i], a_csr->row_ptr[i+1],
+                            B->row_idx, B->col_ptr[j], B->col_ptr[j+1]);
+            if (elem)
+                C->col_ptr[j]++;
+        }
+    }
+
+    for (int i = 0, cumsum = 0; i <= C->n; i++) {
+        int temp = cumsum;
+        cumsum += C->col_ptr[i];
+        C->col_ptr[i] = temp;
+    }
+    C->row_idx = malloc(C->col_ptr[C->n]*sizeof(int));
+
+    #pragma omp parallel for
+    for (int j = 0; j < F->n; j++) {
+        for (int ii = F->col_ptr[j]; ii < F->col_ptr[j+1]; ii++) {
+            int i = F->row_idx[ii];
+            int elem = spvm(a_csr->col_idx, a_csr->row_ptr[i], a_csr->row_ptr[i+1],
+                             B->row_idx, B->col_ptr[j], B->col_ptr[j+1]);
+            if (elem) {
+                int dest = C->col_ptr[j];
+                C->row_idx[dest] = i;
+                C->col_ptr[j]++;
+            }
+        }
+    }
+
+    for(int col = 0, last = 0; col <= C->n; col++){
+        int temp  = C->col_ptr[col];
+        C->col_ptr[col] = last;
+        last    = temp;
+    }
+
+    CSRMatrixfree(a_csr);
+    free(a_csr);
     return C;
 }
 
@@ -1119,6 +1241,13 @@ CSCMatrix* bmm(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, char* method, int filte
             return NULL;
         } else {
             return bmm_sp(A, B);
+        }
+    } else if (strcmp(method, "cp") == 0) {
+        if (filter) {
+            return bmm_cpf(A, B, F);
+        } else {
+            //return bmm_sp(A, B);
+            return NULL;
         }
     } else {
         fprintf(stderr, "Unknown method, %s, aborting\n", method);
