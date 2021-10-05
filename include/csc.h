@@ -59,6 +59,59 @@ void CSRMatrixfree(CSRMatrix* arg){
     free(arg->col_idx);
 }
 
+CSCMatrix* csc_copy(CSCMatrix* m) {
+    CSCMatrix* ret = malloc(sizeof(CSCMatrix));
+    ret->n = m->n;
+    ret->col_ptr = malloc((m->n+1)*sizeof(int));
+    ret->row_idx = malloc(m->col_ptr[m->n]*sizeof(int));
+    memcpy(ret->col_ptr, m->col_ptr, (m->n+1)*sizeof(int));
+    memcpy(ret->row_idx, m->row_idx, m->col_ptr[m->n]*sizeof(int));
+    return ret;
+}
+
+/**
+ * Converts CSC matrix to CSR
+ * https://github.com/scipy/scipy/blob/master/scipy/sparse/sparsetools/csr.h#L418
+ * O(nnz(A) + max(n_row,n_col))
+ */
+CSRMatrix* csc2csr(CSCMatrix* m) {
+    int nnz = m->col_ptr[m->n];
+    CSRMatrix* ret = malloc(sizeof(CSRMatrix));
+    ret->n = m->n;
+    ret->row_ptr = calloc(ret->n+1, sizeof(int));
+    ret->col_idx = malloc(nnz * sizeof(int));
+
+    for (int i = 0; i < nnz; i++)
+        ret->row_ptr[m->row_idx[i]]++;
+
+    //cumsum the nnz
+    for(int row = 0, cumsum = 0; row < ret->n; row++){
+        int temp  = ret->row_ptr[row];
+        ret->row_ptr[row] = cumsum;
+        cumsum += temp;
+    }
+    ret->row_ptr[ret->n] = nnz;
+
+    for(int col = 0; col < m->n; col++){
+        for(int jj = m->col_ptr[col]; jj < m->col_ptr[col+1]; jj++){
+            int row  = m->row_idx[jj];
+            int dest = ret->row_ptr[row];
+
+            ret->col_idx[dest] = col;
+
+            ret->row_ptr[row]++;
+        }
+    }
+
+    for(int row = 0, last = 0; row <= ret->n; row++){
+        int temp  = ret->row_ptr[row];
+        ret->row_ptr[row] = last;
+        last    = temp;
+    }
+
+    return ret;
+}
+
 /**
  * Frees the memory allocated by a CSCMatrix**. nb is the dimension of the CSCMatrix** (such that nb*nb is the total amount of elements of the CSCMatrix**)
  **/
@@ -149,6 +202,25 @@ int* CSC2array(CSCMatrix arg){
    return ret;
 }
 
+/*Function to convert a CSC structure to a row major array. Useful in validating the answers*/
+int* CSR2array(CSRMatrix arg){
+   /*Initialising useful variables and allocatin memory*/
+   int n=arg.n; 
+   int* ret=(int*)calloc(n*n,sizeof(int));
+   if(ret==NULL){
+       printf("could not allocate memory in CSC_convert function, exiting\n");
+       exit(-1);
+   }
+
+   for(int i=0; i<n; i++){
+       for(int jj=arg.row_ptr[i]; jj<arg.row_ptr[i+1]; jj++){
+           int j=arg.col_idx[jj];
+           ret[i*n+j]=1;
+       }
+   }
+   return ret;
+}
+
 /* square CSC to CSR matrix conversion 
    https://github.com/scipy/scipy/blob/3b36a574dc657d1ca116f6e230be694f3de31afc/scipy/sparse/sparsetools/csr.h#L376
 */
@@ -196,6 +268,15 @@ void print_csc(CSCMatrix* m) {
     print_vector(m->col_ptr, m->n+1);
     print_vector(m->row_idx, m->col_ptr[m->n]);
     int* arr = CSC2array(*m);
+    print_vector2D(arr, m->n, m->n);
+    free(arr);
+}
+
+void print_csr(CSRMatrix* m) {
+    printf("N: %d\n", m->n);
+    print_vector(m->row_ptr, m->n+1);
+    print_vector(m->col_idx, m->row_ptr[m->n]);
+    int* arr = CSR2array(*m);
     print_vector2D(arr, m->n, m->n);
     free(arr);
 }
@@ -929,20 +1010,152 @@ int inner_product(CSCMatrix* A, CSCMatrix* B, int row, int col){
 }
 
 /**
- * sparse vector multiplication
+ * sparse vector multiplication. Assumes that indices are in ascending order
  */
-int spvm(int* vec1, int n1, int* vec2, int n2) {
-    int i=0, j=0;
-    while (i<n1 && j<n2) {
-        if (vec1[i] == vec2[j])
+int spvm(int* idx1, int begin1, int end1, int* idx2, int begin2, int end2) {
+    int i = begin1;
+    int j = begin2;
+    
+    while (i < end1 && j < end2) {
+        if (idx1[i] == idx2[j])
             return 1;
-        else if (vec1[i] < vec2[j])
+        else if (idx1[i] < idx2[j])
             i++;
         else
             j++;
     }
     return 0;
 }
+
+/**
+ * Computes CSC matrix element-wise or (C = A | B).
+ * Assumes A->n=B->n=C->n and that C->col_ptr is correctly allocated with C->n elements
+ * Assumes row_idx are in ascending order in each column. Do not perform in-line (with A=C or B=C)
+ * 
+ * 0(A.nnz+B.nnz)
+ */
+void spmor(CSCMatrix* A, CSCMatrix* B, CSCMatrix* C) {
+    C->row_idx = realloc(C->row_idx, 
+                (A->col_ptr[A->n]+B->col_ptr[B->n])*sizeof(int)); // allocate result upper bound for now
+    int nnz = 0;
+    C->col_ptr[0] = 0;
+
+    for (int i = 0; i < C->n; i++) {
+        int jja = A->col_ptr[i];
+        int jjb = B->col_ptr[i];
+
+        while(jja < A->col_ptr[i+1] && jjb < B->col_ptr[i+1]) {
+            int ja = A->row_idx[jja];
+            int jb = B->row_idx[jjb];
+
+            printf("ja=%d, jb=%d\n", ja, jb);
+            if (ja < jb) {
+                C->row_idx[nnz] = ja;
+                jja++;
+            } else if (jb < ja) {
+                C->row_idx[nnz] = jb;
+                jjb++;
+            } else {
+                C->row_idx[nnz] = ja;
+                jja++;
+                jjb++;
+            }
+            nnz++;
+        }
+
+        // Copy the remaining indices if left
+        while (jja < A->col_ptr[i+1]) {
+            int ja = A->row_idx[jja];
+            C->row_idx[nnz] = ja;
+            jja++;
+            nnz++;
+        }
+        while (jjb < B->col_ptr[i+1]) {
+            int jb = B->row_idx[jjb];
+            C->row_idx[nnz] = jb;
+            jjb++;
+            nnz++;
+        }
+        C->col_ptr[i+1] = nnz;
+    }
+
+    C->row_idx = realloc(C->row_idx, nnz*sizeof(int));
+}
+
+/**
+ * Computes CSC matrix element-wise or (C = A | B).
+ * Assumes A->n=B->n=C->n and that C->col_ptr is correctly allocated with C->n elements
+ * Does NOT assume row_idx are in ascending order in each column. Do not perform in-line (with A=C or B=C)
+ * 
+ * 0(A.nnz+B.nnz) using O(n) memory
+ */
+void spmor2(CSCMatrix* A, CSCMatrix* B, CSCMatrix* C) {
+    C->row_idx = realloc(C->row_idx, 
+                (A->col_ptr[A->n]+B->col_ptr[B->n])*sizeof(int)); // allocate result upper bound for now
+    int nnz = 0;
+    C->col_ptr[0] = 0;
+
+    int* mask = calloc(C->n, sizeof(int)); // contains whether a row_idx exists in C's column or not
+
+    for (int i = 0; i < C->n; i++) {
+        for (int jj = A->col_ptr[i]; jj < A->col_ptr[i+1]; jj++) {
+            int j = A->row_idx[jj];
+            mask[j] = 1;
+            C->row_idx[nnz] = j;
+            nnz++;
+        }
+        for (int jj = B->col_ptr[i]; jj < B->col_ptr[i+1]; jj++) {
+            int j = B->row_idx[jj];
+            if (!mask[j]) {
+                mask[j] = 1;
+                C->row_idx[nnz] = j;
+                nnz++;
+            }
+        }
+        C->col_ptr[i+1] = nnz;
+        // clear mask for next iteration
+        for (int jj = C->col_ptr[i]; jj < C->col_ptr[i+1]; jj++) mask[C->row_idx[jj]] = 0;
+    }
+    free(mask);
+
+    C->row_idx = realloc(C->row_idx, nnz*sizeof(int));
+}
+/*
+ * Computes CSC matrix element-wise "and not" (C = !A & B).
+ * Assumes A->n=B->n=C->n and that C->col_ptr is correctly allocated with C->n elements
+ * Does NOT assume row_idx are in ascending order in each column. Do not perform in-line (with A=C or B=C)
+ * 
+ * 0(A.nnz+B.nnz) using O(n) memory
+ */
+void spmandnot(CSCMatrix* A, CSCMatrix* B, CSCMatrix* C) {
+    C->row_idx = realloc(C->row_idx, 
+                (A->col_ptr[A->n]+B->col_ptr[B->n])*sizeof(int)); // allocate result upper bound for now
+    int nnz = 0;
+    C->col_ptr[0] = 0;
+
+    int* mask = calloc(C->n, sizeof(int)); // contains whether a row_idx exists in A's column or not
+
+    for (int i = 0; i < C->n; i++) {
+        for (int jj = A->col_ptr[i]; jj < A->col_ptr[i+1]; jj++) {
+            int j = A->row_idx[jj];
+            mask[j] = 1;
+        }
+        for (int jj = B->col_ptr[i]; jj < B->col_ptr[i+1]; jj++) {
+            int j = B->row_idx[jj];
+            if (!mask[j]) {
+                C->row_idx[nnz] = j;
+                nnz++;
+            }
+        }
+        C->col_ptr[i+1] = nnz;
+        // clear mask for next iteration
+        for (int jj = A->col_ptr[i]; jj < A->col_ptr[i+1]; jj++) mask[A->row_idx[jj]] = 0;
+    }
+    free(mask);
+
+    C->row_idx = realloc(C->row_idx, nnz*sizeof(int));
+}
+
 
 
 /*  BMM using definition, serial implementation, filtered
@@ -1052,6 +1265,55 @@ CSCMatrix* bmm_ds(CSCMatrix* A, CSCMatrix* B){
     C->col_ptr = product_col_ptr;
     C->n = n;
 
+    return C;
+}
+
+CSCMatrix* bmm_cpf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F){
+    CSRMatrix* a_csr = csc2csr(A);
+    CSCMatrix* C = malloc(sizeof(CSCMatrix));
+    C->col_ptr = calloc((B->n+1), sizeof(int));
+    C->n = B->n;
+
+    #pragma omp parallel for
+    for (int j = 0; j < F->n; j++) {
+        for (int ii = F->col_ptr[j]; ii < F->col_ptr[j+1]; ii++) {
+            int i = F->row_idx[ii];
+            int elem = spvm(a_csr->col_idx, a_csr->row_ptr[i], a_csr->row_ptr[i+1],
+                            B->row_idx, B->col_ptr[j], B->col_ptr[j+1]);
+            if (elem)
+                C->col_ptr[j]++;
+        }
+    }
+
+    for (int i = 0, cumsum = 0; i <= C->n; i++) {
+        int temp = cumsum;
+        cumsum += C->col_ptr[i];
+        C->col_ptr[i] = temp;
+    }
+    C->row_idx = malloc(C->col_ptr[C->n]*sizeof(int));
+
+    #pragma omp parallel for
+    for (int j = 0; j < F->n; j++) {
+        for (int ii = F->col_ptr[j]; ii < F->col_ptr[j+1]; ii++) {
+            int i = F->row_idx[ii];
+            int elem = spvm(a_csr->col_idx, a_csr->row_ptr[i], a_csr->row_ptr[i+1],
+                             B->row_idx, B->col_ptr[j], B->col_ptr[j+1]);
+            if (elem) {
+                int dest = C->col_ptr[j];
+                C->row_idx[dest] = i;
+                C->col_ptr[j]++;
+            }
+        }
+    }
+
+    for(int col = 0, last = 0; col <= C->n; col++){
+        int temp  = C->col_ptr[col];
+        C->col_ptr[col] = last;
+        last    = temp;
+    }
+
+    CSRMatrixfree(a_csr);
+    free(a_csr);
     return C;
 }
 
@@ -1223,8 +1485,55 @@ CSCMatrix* bmm_sp(CSCMatrix* A, CSCMatrix* B) {
  * serial block BMM
  */
 CSCMatrix* bmm_bs(CSCMatrix* A, CSCMatrix* B, int b) {
-    printf("TODO: implement bs\n");
-    return NULL;
+    CSCMatrix** blocka = block_CSC(A, b);
+    CSCMatrix** blockb = block_CSC(B, b);
+
+    assert(A->n == B->n);
+
+    int n_b=ceil(A->n/((double) b));
+    CSCMatrix** blockc = (CSCMatrix**) malloc(n_b*n_b*sizeof(CSCMatrix*));   
+    if(blockc == NULL){    
+        printf("could not allocate memory in block_CSC function for the CSCMatrix** blocked, exiting\n");
+        exit(-1);
+    }
+    #pragma omp parallel for schedule(static) collapse(2)
+    for (int p = 0; p < n_b; p++) {
+        for (int q = 0; q < n_b; q++) {
+            int blockc_idx = p*n_b+q;
+            // Cp,q = 0
+            blockc[blockc_idx] = malloc(sizeof(CSCMatrix));
+            blockc[blockc_idx]->n = b;
+            blockc[blockc_idx]->col_ptr = calloc(b+1, sizeof(int));
+            blockc[blockc_idx]->row_idx = NULL; // NULL can be passed to realloc later
+            for (int s = 0; s < n_b; s++) {
+                int blocka_idx = p*n_b+s;
+                int blockb_idx = s*n_b+q;
+                CSCMatrix* AB = bmm_ss(blocka[blocka_idx], blockb[blockb_idx]);
+                CSCMatrix* tmp_blockc = csc_copy(blockc[blockc_idx]);
+                spmor2(tmp_blockc, AB, blockc[blockc_idx]);
+                CSCMatrixfree(AB);
+                CSCMatrixfree(tmp_blockc);
+                free(AB);
+                free(tmp_blockc);
+            }
+        }
+    }
+
+    CSCMatrix* C = reconstruct_from_blocks(blockc, n_b, A->n);
+
+    for (int i = 0; i < n_b*n_b; i++) {
+        CSCMatrixfree(blocka[i]);
+        CSCMatrixfree(blockb[i]);
+        CSCMatrixfree(blockc[i]);
+        free(blocka[i]);
+        free(blockb[i]);
+        free(blockc[i]);
+    }
+    free(blocka);
+    free(blockb);
+    free(blockc);
+
+    return C;
 }
 
 CSCMatrix* bmm_bsf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, int b) {
@@ -1241,14 +1550,56 @@ CSCMatrix* bmm_bsf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, int b) {
         printf("could not allocate memory in block_CSC function for the CSCMatrix** blocked, exiting\n");
         exit(-1);
     }
-    for (int i = 0; i < n_b; i++) {
-        for (int j = 0; j < n_b; j++) {
-            int block_idx = i*n_b+j;
-            blockc[block_idx] = bmm_dsf(&A[block_idx], &B[block_idx], &F[block_idx]);
+    #pragma omp parallel for schedule(static) collapse(2)
+    for (int p = 0; p < n_b; p++) {
+        for (int q = 0; q < n_b; q++) {
+            int blockc_idx = p*n_b+q;
+            // Cp,q = 0
+            blockc[blockc_idx] = malloc(sizeof(CSCMatrix));
+            blockc[blockc_idx]->n = b;
+            blockc[blockc_idx]->col_ptr = calloc(b+1, sizeof(int));
+            blockc[blockc_idx]->row_idx = NULL; // NULL can be passed to realloc later
+            CSCMatrix* X = csc_copy(blockf[blockc_idx]);
+            for (int s = 0; s < n_b; s++) {
+                int blocka_idx = p*n_b+s;
+                int blockb_idx = s*n_b+q;
+
+                CSCMatrix* AB = bmm_ssf(blocka[blocka_idx], blockb[blockb_idx], X);
+                CSCMatrix* tmp_blockc = csc_copy(blockc[blockc_idx]);
+                spmor2(tmp_blockc, AB, blockc[blockc_idx]);
+                CSCMatrixfree(AB);
+                free(AB);
+                CSCMatrixfree(tmp_blockc);
+                free(tmp_blockc);
+
+                CSCMatrix* tmp_x = csc_copy(X);
+                spmandnot(blockc[blockc_idx], tmp_x, X);
+                CSCMatrixfree(tmp_x);
+                free(tmp_x);
+            }
+            CSCMatrixfree(X);
+            free(X);
         }
     }
 
-    return NULL;
+    CSCMatrix* C = reconstruct_from_blocks(blockc, n_b, A->n);
+
+    for (int i = 0; i < n_b*n_b; i++) {
+        CSCMatrixfree(blocka[i]);
+        CSCMatrixfree(blockb[i]);
+        CSCMatrixfree(blockc[i]);
+        CSCMatrixfree(blockf[i]);
+        free(blocka[i]);
+        free(blockb[i]);
+        free(blockc[i]);
+        free(blockf[i]);
+    }
+    free(blocka);
+    free(blockb);
+    free(blockc);
+    free(blockf);
+
+    return C;
 }
 
 // interface for all BMM methods
@@ -1277,6 +1628,13 @@ CSCMatrix* bmm(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, char* method, int filte
             return NULL;
         } else {
             return bmm_sp(A, B);
+        }
+    } else if (strcmp(method, "cp") == 0) {
+        if (filter) {
+            return bmm_cpf(A, B, F);
+        } else {
+            //return bmm_sp(A, B);
+            return NULL;
         }
     } else {
         fprintf(stderr, "Unknown method, %s, aborting\n", method);

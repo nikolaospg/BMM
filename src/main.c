@@ -12,9 +12,10 @@ int main(int argc, char** argv) {
     char* bfile;
     char* ffile = NULL;
     char* method;
+    int bsize = -1;
 
     // http://www.gnu.org/software/libc/manual/html_node/Example-of-Getopt.html
-    while((c = getopt(argc, argv, "a:b:f:m:")) != -1) {
+    while((c = getopt(argc, argv, "a:b:f:m:s:")) != -1) {
         switch (c) {
             // first bmm operand file (required)
             case 'a':
@@ -31,6 +32,10 @@ int main(int argc, char** argv) {
             // Method name (eg serial, block parallel, 4russians etc) (required)
             case 'm':
                 method = optarg;
+                break;
+            // Block size (optional, required by blocked methods)
+            case 's':
+                bsize = atoi(optarg);
                 break;
             default:
                 fprintf(stderr, "Uknown argument, aborting");
@@ -67,12 +72,10 @@ int main(int argc, char** argv) {
     clock_gettime(CLOCK_MONOTONIC, &ts_start);
 
     // BMM (TODO: configure MPI when needed)
-    C = bmm(A, B, F, method, F != NULL, -1);
-    /*printf("A->n: %d\n", A->n);
-    int k = sqrt(A->n);
+    C = bmm(A, B, F, method, F != NULL, bsize);
+    /*int k = sqrt(A->n);
     int b = 120;
-    block_CSC(A, k);*/
-    printf("bmmd\n");
+    block_CSC(A, A->n/2+1);*/
 
     // timing end
     struct timespec ts_end;
