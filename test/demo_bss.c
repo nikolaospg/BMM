@@ -3,7 +3,7 @@
 //This script is used to demonstrate the use and correctness of the new bss functions. 
 
 
-
+void partial_product(CSCMatrixBlocked* A, CSCMatrixBlocked* B, CSCMatrix* C, int s, int p, int q);
 
 //Copies the content of block_c to temp_block_c
 void csc_copy_new(CSCMatrix* block_c, CSCMatrix* temp_block_c) {
@@ -198,10 +198,6 @@ void partial_product(CSCMatrixBlocked* A, CSCMatrixBlocked* B, CSCMatrix* C, int
 
 
 int main(int argc, char* argv[]){
-
-    system("clear");
-
-
     srand(time(NULL));
     if(argc<4){
         printf("Give me the argument for the n, the sparsity, the method and the b value.\n");

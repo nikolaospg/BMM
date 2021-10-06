@@ -4,7 +4,6 @@ CPPC=g++
 BINS_DIR=bin
 MMIO_LIB=$(BINS_DIR)/mmio.o
 C_SOURCES = mmio/mmio.c
-CPP_SOURCES = src/sparse_graph.cpp
 SOURCES = $(C_SOURCES) $(CPP_SOURCES)
 
 CFLAGS=-Wall -O3 -Iinclude -Immio -std=c99 -D_POSIX_C_SOURCE=199309L -fopenmp # https://stackoverflow.com/questions/29666937/error-clock-monotonic-undeclared-first-use-in-this-function
@@ -28,8 +27,8 @@ data:
 mmio: bin
 	$(CC) -c $(CFLAGS) -o $(MMIO_LIB) $(C_SOURCES)
 
-main: bin | mmio
-	$(CC) $(CFLAGS) -o $(BINS_DIR)/$@ src/main.c $(LDFLAGS)
+bmm: bin | mmio
+	$(CC) $(CFLAGS) -o $(BINS_DIR)/$@ src/bmm.c $(LDFLAGS)
 
 test: bin | mmio
 	$(CC) $(CFLAGS) -o $(BINS_DIR)/product_test test/product_test.c $(LDFLAGS)
@@ -40,7 +39,11 @@ test: bin | mmio
 	chmod +x all_tests.bash
 	./all_tests.bash
 
-all: main test
+bash: bin
+	chmod +x bmm_self.bash
+	chmod +x benchmark.bash
+
+all: bmm test bash
 
 clean:
 	rm -rf $(BINS_DIR)

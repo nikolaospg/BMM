@@ -1,9 +1,15 @@
+
+#ifndef UTILS_H
+#define UTILS_H
+
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
 #include <stdio.h>
 #include <assert.h>
+#include <time.h>
+#include <unistd.h>
 
 
 /** 
@@ -70,3 +76,23 @@ int binary_search(int* a,int begin, int end, int elem){
     
     return 0;
 }
+
+/* returns duration from ts_start to ts_end in seconds */
+double duration_secs(struct timespec ts_start, struct timespec ts_end) {
+    struct timespec duration;
+    clock_gettime(CLOCK_MONOTONIC, &ts_end);
+    duration.tv_sec = ts_end.tv_sec - ts_start.tv_sec;
+    duration.tv_nsec = ts_end.tv_nsec - ts_start.tv_nsec;
+    while (duration.tv_nsec > 1000000000) {
+        duration.tv_sec++;
+        duration.tv_nsec -= 1000000000;
+    }   
+    while (duration.tv_nsec < 0) {
+        duration.tv_sec--;
+        duration.tv_nsec += 1000000000;
+    }   
+    double dur_d = duration.tv_sec + duration.tv_nsec/1000000000.0;
+    return dur_d;
+}
+
+#endif

@@ -1,3 +1,6 @@
+#ifndef CSC_H
+#define CSC_H
+
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -10,6 +13,7 @@
 
 #include <omp.h>
 
+#define AF_THRESH 4.5
 
 /** 
  * Defining a Struct, which resembles the CSC data structure 
@@ -427,14 +431,14 @@ CSCMatrix* CSCfromMM(char* filename){
  *      CSCMatrix** blocked -> This value points to an 1D array, with (nbxnb) CSCMatrix* values.
  * */
 CSCMatrix** block_CSC(CSCMatrix* A, int b){
-    if(A->n%b!=0){     //Demanding that nb=n/b is an integer
+    /*if(A->n%b!=0){     //Demanding that nb=n/b is an integer
         printf("Warning, in block_CSC, the mod(n,b)=%d, which is !=0.\n",A->n%b);
-    }
+    }*/
     int n_b=ceil(A->n/((double) b));
     printf("Creating block matrix with %dx%d blocks of size %dx%d\n", n_b, n_b, b, b);
-    if(n_b<=b){      //Demanding that nb>b
+    /*if(n_b<=b){      //Demanding that nb>b
         printf("Warning, the nb=%d, b=%d. nb is expected to be >b\n",n_b,b);
-    }
+    }*/
 
     /*Now allocating memory for the CSCMatrix** (to be returned)*/
     CSCMatrix** blocked=(CSCMatrix**)malloc(n_b*n_b*sizeof(CSCMatrix*));   
@@ -1268,6 +1272,12 @@ CSCMatrix* bmm_ds(CSCMatrix* A, CSCMatrix* B){
     return C;
 }
 
+/**
+ * BMM by converting A to CSR and doing CSR*CSC
+ * Complexity: O(F.nnz*K) where K is the maximum nnz per column in A and B
+ * Only viable with filtered BMM, otherwise O(F.n^2*K) is too expensive compared to bmm_ss
+ * Uses OpenMP multithreading
+ */
 CSCMatrix* bmm_cpf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F){
     CSRMatrix* a_csr = csc2csr(A);
     CSCMatrix* C = malloc(sizeof(CSCMatrix));
@@ -1410,6 +1420,19 @@ CSCMatrix* bmm_ssf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F) {
 
     C->row_idx = realloc(C->row_idx, nnz*sizeof(int));
     return C;
+}
+
+/**
+ * BMM adaptive algorithm. Uses bmm_cpf for f.nnz/n>AF_THRESH and bmm_ssf otherwise
+ */
+CSCMatrix* bmm_af(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F) {
+    int n = F->n;
+    int nnz = F->col_ptr[n];
+    double ratio = nnz / ((double) n);
+    if (ratio > AF_THRESH)
+        return bmm_cpf(A, B, F);
+    else
+        return bmm_ssf(A, B, F);
 }
 
 /**
@@ -1624,7 +1647,8 @@ CSCMatrix* bmm(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, char* method, int filte
         }
     } else if (strcmp(method, "sp") == 0) {
         if (filter) {
-            //return bmm_spf(A, B, F);
+            printf("BMM SMMP parallel version not supported for non-filtered BMM. Use cp instead\n");
+            exit(-1);
             return NULL;
         } else {
             return bmm_sp(A, B);
@@ -1633,7 +1657,16 @@ CSCMatrix* bmm(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, char* method, int filte
         if (filter) {
             return bmm_cpf(A, B, F);
         } else {
-            //return bmm_sp(A, B);
+            printf("BMM CSR*CSC not supported for non-filtered BMM. Use ss instead\n");
+            exit(-1);
+            return NULL;
+        }
+    } else if (strcmp(method, "a") == 0) {
+        if (filter) {
+            return bmm_af(A, B, F);
+        } else {
+            printf("BMM adaptive not supported for non-filtered BMM. Use ss instead\n");
+            exit(-1);
             return NULL;
         }
     } else {
@@ -1641,3 +1674,5 @@ CSCMatrix* bmm(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, char* method, int filte
         exit(-1);
     }
 }
+
+#endif
