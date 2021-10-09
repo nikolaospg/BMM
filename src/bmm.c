@@ -95,8 +95,15 @@ int main(int argc, char** argv) {
     printf("BMM duration: %lf seconds\n", dur_d);
 
     CSCMatrixfree(A);
-    if (!asameasb) CSCMatrixfree(B);
+    free(A);
+    if (!asameasb) {
+        CSCMatrixfree(B);
+        free(B);
+    }
     CSCMatrixfree(C);
-    if (ffile && !(fsameasa || fsameasb))
+    free(C);
+    if (ffile && !(fsameasa || fsameasb)) {
         CSCMatrixfree(F);
+        free(F);
+    }
 }

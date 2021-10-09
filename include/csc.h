@@ -332,7 +332,7 @@ CSCMatrix* CSCfromMM(char* filename){
     int wrn_nzoo = 1;
     CSCMatrix* m = (CSCMatrix*) malloc(sizeof(CSCMatrix));
     m->n = N;
-    m->col_ptr=(int*)malloc((N+1)*sizeof(int));
+    m->col_ptr=(int*)calloc((N+1), sizeof(int));
     if(!m->col_ptr){
         printf("Error, could not allocate col_ptr for MM file\n");
         exit(7);
