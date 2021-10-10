@@ -17,7 +17,6 @@ do
   ./bin/product_test 50 0.9 cp 1
   ./bin/conversion_test 500
   ./bin/blocking_test 500 20
-  ./bin/temp_test 5000 2635
-  ./bin/demo_bss 500 0.9 324
+  #./bin/demo_bss 500 0.9 324
   echo "Iteration $i Complete - No Errors"
 done 

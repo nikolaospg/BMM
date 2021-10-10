@@ -19,10 +19,10 @@ int main(int argc, char* argv[]){
     
     
     //Getting the blocked version and then reconstructing
-    CSCMatrix** blocked= block_CSC(&A, b);
+    CSCMatrixBlocked* blocked= block_CSC(&A, b);
     int nb=n/b;
 
-    CSCMatrix* reconstructed=reconstruct_from_blocks(blocked, nb, A.n);
+    CSCMatrix* reconstructed=unblock_CSC(blocked, nb, A.n);
     int* y=CSC2array(*reconstructed);       //The array form of the reconstructed matrix
     //Finished reconstructing and got the final array form of the reconstructed
     
@@ -41,9 +41,9 @@ int main(int argc, char* argv[]){
     free(y);
     CSCMatrixfree(reconstructed);
     free(reconstructed);
-    ArrayCSCMatrixfree(blocked, nb);
     free(x);
     CSCMatrixfree(&A);
+    CSCMatrixBlocked_free(blocked);
 
     return 0;
 

@@ -34,8 +34,7 @@ test: bin | mmio
 	$(CC) $(CFLAGS) -o $(BINS_DIR)/product_test test/product_test.c $(LDFLAGS)
 	$(CC) $(CFLAGS) -o $(BINS_DIR)/conversion_test test/conversion_test.c $(LDFLAGS)
 	$(CC) $(CFLAGS) -o $(BINS_DIR)/blocking_test test/blocking_test.c $(LDFLAGS) 
-	$(CC) $(CFLAGS) -o $(BINS_DIR)/temp_test test/temp_test.c $(LDFLAGS) 
-	$(CC) $(CFLAGS) -o $(BINS_DIR)/demo_bss test/demo_bss.c $(LDFLAGS) 
+	#$(CC) $(CFLAGS) -o $(BINS_DIR)/demo_bss test/demo_bss.c $(LDFLAGS) 
 	chmod +x all_tests.bash
 	./all_tests.bash
 

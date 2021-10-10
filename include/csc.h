@@ -422,109 +422,8 @@ CSCMatrix* CSCfromMM(char* filename){
     return m;
 }
 
-/**
- *  Creates a block CSC matrix
- *  inputs:
- *      CSCMatrix* A  -> The initial CSCMatirx
- *      int b->       The size of the new blocks. The initial matrix is partitioned into nbxnb blocks, where nb=n/b must be an integer. Also nb must be >b.
- *  returns:
- *      CSCMatrix** blocked -> This value points to an 1D array, with (nbxnb) CSCMatrix* values.
- * */
-CSCMatrix** block_CSC(CSCMatrix* A, int b){
-    /*if(A->n%b!=0){     //Demanding that nb=n/b is an integer
-        printf("Warning, in block_CSC, the mod(n,b)=%d, which is !=0.\n",A->n%b);
-    }*/
-    int n_b=ceil(A->n/((double) b));
-    printf("Creating block matrix with %dx%d blocks of size %dx%d\n", n_b, n_b, b, b);
-    /*if(n_b<=b){      //Demanding that nb>b
-        printf("Warning, the nb=%d, b=%d. nb is expected to be >b\n",n_b,b);
-    }*/
-
-    /*Now allocating memory for the CSCMatrix** (to be returned)*/
-    CSCMatrix** blocked=(CSCMatrix**)malloc(n_b*n_b*sizeof(CSCMatrix*));   
-    if(blocked==NULL){          
-        printf("could not allocate memory in block_CSC function for the CSCMatrix** blocked, exiting\n");
-        exit(-1);
-    }    
-
-    //In each iteration of the following for loop, We allocate memory for one of the nbxnb blocks. 
-    int init_row_idx_capacity = A->col_ptr[A->n]/(n_b*n_b)+1; // expected capacity (+1 for non zero)
-    // it is possible to use just n_b for storing the capacities but then it would not be possible to parallelize the 
-    // filling of the blocks in the future
-    int* row_idx_capacities = (int*) malloc(n_b*n_b*sizeof(int)); // contains the allocation size of row_idx for each block
-    if(row_idx_capacities==NULL){
-        printf("could not allocate memory in block_CSC function for row_idx capacities, exiting\n");
-        exit(-1);
-    }
-    for (int i = 0; i < n_b*n_b; i++) row_idx_capacities[i] = init_row_idx_capacity;
-    for (int i=0; i<n_b*n_b; i++){
-        blocked[i]=(CSCMatrix*)malloc(sizeof(CSCMatrix));
-        if(blocked[i]==NULL){
-            printf("could not allocate memory in block_CSC function for the %dth element of the blocked array, exiting\n",i);
-            exit(-1);
-        }
-        blocked[i]->n=b;          
-
-        blocked[i]->col_ptr=(int*)malloc((b+1)*sizeof(int));    //I know that every block has b columns
-        if(blocked[i]->col_ptr==NULL){
-            printf("could not allocate memory in block_CSC function for the col_ptr of the %dth element of the blocked array, exiting\n",i);
-            exit(-1);
-        }
-        blocked[i]->col_ptr[0]=0;
-        blocked[i]->row_idx=(int*)malloc((row_idx_capacities[i])*sizeof(int));
-        if(blocked[i]->row_idx==NULL){
-            printf("could not allocate memory in block_CSC function for the row_idx of the %dth element of the blocked array, exiting\n",i);
-            exit(-1);
-        }
-    }
-
-    // fill blocks
-    int n_padded = n_b*b;
-    for (int i = 0; i < n_padded; i++) {
-        int block_idx_x = i/b;
-        int block_col_idx = i%b;
-        for (int block_idx_y = 0; block_idx_y < n_b; block_idx_y++) {
-            int block_idx = block_idx_y*n_b + block_idx_x; // block index in blocked (blocked is row-major)
-            blocked[block_idx]->col_ptr[block_col_idx+1] = blocked[block_idx]->col_ptr[block_col_idx];
-        }
-
-        if (i < A->n) { // zero padding after A->n-th column
-            for (int j = A->col_ptr[i]; j < A->col_ptr[i+1]; j++) {
-                int row_idx = A->row_idx[j];
-                int block_row_idx = row_idx%b;
-                int block_idx_y = row_idx/b;
-                int block_idx = block_idx_y*n_b + block_idx_x; // block index in blocked (blocked is row-major)
-
-                int block_nnz = blocked[block_idx]->col_ptr[block_col_idx+1];
-                int block_row_idx_capacity = row_idx_capacities[block_idx];
-                if (block_nnz == block_row_idx_capacity) {
-                    // expand row_idx capacity
-                    row_idx_capacities[block_idx] *= 2;
-                    blocked[block_idx]->row_idx = (int*) realloc(blocked[block_idx]->row_idx, row_idx_capacities[block_idx]*sizeof(int));
-                }
-                blocked[block_idx]->row_idx[block_nnz] = block_row_idx;
-                blocked[block_idx]->col_ptr[block_col_idx+1]++;
-            }
-        }
-
-        // after last column, reallocate blocks to just neccessary size
-        if (block_col_idx == b-1) {
-            for (int block_idx_y = 0; block_idx_y < n_b; block_idx_y++) {
-                int block_idx = block_idx_y*n_b + block_idx_x; // block index in blocked (blocked is row-major)
-                blocked[block_idx]->row_idx = (int*) realloc(blocked[block_idx]->row_idx, blocked[block_idx]->col_ptr[b]*sizeof(int));
-                // row_idx_capacities[block_idx] = blocked[block_idx]->col_ptr[b]; // not neccessary, won't be used again
-            }
-        }
-    }
-    free(row_idx_capacities);
-    
-    return blocked;
-}
-
 //Fast version of the blocking. It returns a CSCMatrixBlocked struct
-CSCMatrixBlocked* fast_block_CSC(CSCMatrix* A, int b){
-
-
+CSCMatrixBlocked* block_CSC(CSCMatrix* A, int b){
     struct timespec ts_start2;
     clock_gettime(CLOCK_MONOTONIC, &ts_start2);
 
@@ -534,9 +433,7 @@ CSCMatrixBlocked* fast_block_CSC(CSCMatrix* A, int b){
     int* col_ptr=A->col_ptr;
     int nnz=col_ptr[n];
     int* row_idx=A->row_idx;
-    int current_block_col;
     int current_block_row;
-    int access_index;                   //I use this variable to help me access(index) some arrays with the proper way
     int help_variable=(b+1)*nb;         //This is used on some products many times
     //Finished with useful variables
 
@@ -557,20 +454,23 @@ CSCMatrixBlocked* fast_block_CSC(CSCMatrix* A, int b){
     //The following double for loop takes every non zero element of the CSCMatrix A, finds the block column and the block row of the element
     //and uses this info to initialise the values of the col_ptr_combined and the row_idx_indices arrays. These 2 now show the data in a non
     //cumulative way, in another loop later on they are changed so that they show the data in a cumulative way
-    for(int col=0; col<n; col++){
-        current_block_col=col/b;
-        for (int index=col_ptr[col]; index<col_ptr[col+1]; index++ ){
-            current_block_row=row_idx[index]/b;
-            access_index=current_block_row*help_variable + current_block_col +col;
-            col_ptr_combined[access_index+1]++;
-            row_idx_indices[current_block_row*nb + current_block_col +1]++;
+    #pragma omp parallel for
+    for (int current_block_col = 0; current_block_col < nb; current_block_col++) {
+        for(int col=current_block_col*b; col<(current_block_col+1)*b; col++){
+            for (int index=col_ptr[col]; index<col_ptr[col+1]; index++ ){
+                current_block_row=row_idx[index]/b;
+                int access_index=current_block_row*help_variable + current_block_col +col;
+                col_ptr_combined[access_index+1]++;
+                row_idx_indices[current_block_row*nb + current_block_col +1]++;
+            }
         }
     }
 
     //The following loop is used so that the col_ptr_combined shows the data in a cumulative way, as usual on the CSC scheme.
+    #pragma omp parallel for schedule(static) collapse(2)
     for(int i=0; i<nb; i++){
         for(int j=0; j<nb; j++){
-            access_index=i*help_variable + j*(b+1) +1;
+            int access_index=i*help_variable + j*(b+1) +1;
             for(int k=1; k<b+1; k++){
                 col_ptr_combined[access_index]=col_ptr_combined[access_index] + col_ptr_combined[access_index-1];
                 access_index++;
@@ -579,7 +479,7 @@ CSCMatrixBlocked* fast_block_CSC(CSCMatrix* A, int b){
     }
     
     //The following for loop is used so that the row_idx_indices shows the data in a cumulative way, and also fills up the col_ptr_indices values
-    access_index=b+1;
+    int access_index=b+1;
     for(int i=1; i<nb*nb +1; i++){
         row_idx_indices[i]=row_idx_indices[i]+row_idx_indices[i-1];
         col_ptr_indices[i]=access_index;
@@ -590,7 +490,7 @@ CSCMatrixBlocked* fast_block_CSC(CSCMatrix* A, int b){
     int* count_array=(int*)calloc(nb*nb,sizeof(int));   //This is used so that I know how many elements I have stored on each block whenever needed.
     int offset;                                         //Another variable used to help me index the arrays
     for(int col=0; col<n; col++){
-        current_block_col=col/b;
+        int current_block_col=col/b;
         for (int index=col_ptr[col]; index<col_ptr[col+1]; index++ ){
             current_block_row=row_idx[index]/b;
             access_index=current_block_row*nb + current_block_col;
@@ -630,7 +530,7 @@ CSCMatrixBlocked* fast_block_CSC(CSCMatrix* A, int b){
         duration2.tv_nsec += 1000000000;
     }
     double dur_d2 = duration2.tv_sec + duration2.tv_nsec/1000000000.0;
-    printf("\nDuration of fast block CSC: %lf seconds\n\n", dur_d2);
+    printf("\nDuration of block CSC: %lf seconds\n\n", dur_d2);
     //Finished printing
 
     return ret;
@@ -638,8 +538,7 @@ CSCMatrixBlocked* fast_block_CSC(CSCMatrix* A, int b){
 
 //This works with a way equivalent to fast_block_CSC, but creates a CSCMatrixBlocked struct which has the row_idx and the col_ptr of each block in a column major
 //way. This is done because the B matrix might be needed to work this way.
-CSCMatrixBlocked* fast_block_CSC_cols(CSCMatrix* A, int b){
-
+CSCMatrixBlocked* block_CSC_cols(CSCMatrix* A, int b){
     struct timespec ts_start2;
     clock_gettime(CLOCK_MONOTONIC, &ts_start2);
 
@@ -649,7 +548,6 @@ CSCMatrixBlocked* fast_block_CSC_cols(CSCMatrix* A, int b){
     int* col_ptr=A->col_ptr;
     int nnz=col_ptr[n];
     int* row_idx=A->row_idx;
-    int current_block_col;
     int current_block_row;
     int current_row;
     int access_index;                   //I use this variable to help me access(index) some arrays with the proper way
@@ -664,7 +562,7 @@ CSCMatrixBlocked* fast_block_CSC_cols(CSCMatrix* A, int b){
     int* col_ptr_indices= (int*)calloc(nb*nb +1, sizeof(int));
 
     if(row_idx_combined==NULL || col_ptr_combined ==NULL || row_idx_indices==NULL ||  col_ptr_indices==NULL){
-        printf("Could not allocate memory in fast_block_CSC, exiting\n");
+        printf("Could not allocate memory for block_CSC, exiting\n");
         exit(-1);
     }
     //Finished allocating memory
@@ -673,20 +571,22 @@ CSCMatrixBlocked* fast_block_CSC_cols(CSCMatrix* A, int b){
     //The following double for loop takes every non zero element of the CSCMatrix A, finds the block column and the block row of the element
     //and uses this info to initialise the values of the col_ptr_combined and the row_idx_indices arrays. These 2 now show the data in a non
     //cumulative way, in another loop later on they are changed so that they show the data in a cumulative way
-    for(int col=0; col<n; col++){
-        current_block_col=col/b;
-        for (int index=col_ptr[col]; index<col_ptr[col+1]; index++ ){
-            current_row=row_idx[index];
-            current_block_row=current_row/b;
-            //access_index=current_block_row*help_variable + current_block_col +col; 
-            access_index=current_block_col*help_variable + current_block_row*(b+1) +col%b;              //EDO ALLAKSA
+    #pragma omp parallel for
+    for (int current_block_col = 0; current_block_col < nb; current_block_col++) {
+        for(int col=current_block_col*b; col<(current_block_col+1)*b; col++){
+            //int current_block_col=col/b;
+            for (int index=col_ptr[col]; index<col_ptr[col+1]; index++ ){
+                current_row=row_idx[index];
+                current_block_row=current_row/b;
+                access_index=current_block_col*help_variable + current_block_row*(b+1) +col%b;
 
-            col_ptr_combined[access_index+1]++;
-            //row_idx_indices[current_block_row*nb + current_block_col +1]++;
-            row_idx_indices[current_block_col*nb + current_block_row +1]++;                             //EDO ALLAKSA
+                col_ptr_combined[access_index+1]++;
+                row_idx_indices[current_block_col*nb + current_block_row +1]++;
+            }
         }
     }
     //The following loop is used so that the col_ptr_combined shows the data in a cumulative way, as usual on the CSC scheme.
+    #pragma omp parallel for schedule(static) collapse(2)
     for(int i=0; i<nb; i++){
         for(int j=0; j<nb; j++){
             access_index=i*help_variable + j*(b+1) +1;
@@ -709,7 +609,7 @@ CSCMatrixBlocked* fast_block_CSC_cols(CSCMatrix* A, int b){
     int* count_array=(int*)calloc(nb*nb,sizeof(int));   //This is used so that I know how many elements I have stored on each block whenever needed.
     int offset;                                         //Another variable used to help me index the arrays
     for(int col=0; col<n; col++){
-        current_block_col=col/b;
+        int current_block_col=col/b;
         for (int index=col_ptr[col]; index<col_ptr[col+1]; index++ ){
             current_row=row_idx[index];
             current_block_row=current_row/b;
@@ -758,220 +658,76 @@ CSCMatrixBlocked* fast_block_CSC_cols(CSCMatrix* A, int b){
 }
 
 /**
- *  The Following function helps us in the task of reconstructing one Matrix (CSC Form) from a blocked version of the same matrix
- *  It is used to verify that the process of blocking is done correctly
- *  inputs:
- *      1)CSCMatrix** blocked   -> the blocked version of the matrix
- *      2)int nb->      The nb parameter
- *      3)int n ->      Initial size of matrix to remove potential padding
- *  outputs:
- *      CSCMatrix* reconstructed-> The reconstructed CSC Matrix
- * */
-CSCMatrix* reconstruct_from_blocks(CSCMatrix** blocked, int nb, int n){
+ * Reconstructs a single CSC matrix from BCSC form
+ */
+CSCMatrix* unblock_CSC(CSCMatrixBlocked* blocked, int nb, int n) {
+    int b=blocked->b;
+    int nnz = blocked->nnz;
+    int n_padded = nb*b;
 
-
-    struct timespec ts_start2;
-    clock_gettime(CLOCK_MONOTONIC, &ts_start2);
-
-
-    /*Initialising useful variables*/
-    int b=blocked[0]->n;
-    int total_nz=0;
-
-    //Calculating the total amount of non zero elements:
-    for (int i=0; i<nb*nb; i++){
-        total_nz=total_nz+blocked[i]->col_ptr[b];
-    }
-
-    //Initialising memory for the original matrix//
-    CSCMatrix* original=(CSCMatrix*)malloc(sizeof(CSCMatrix));
-    if(original==NULL){
-        printf("On reconstruct_from_blocks could not allocate memory for original!, error\n");
-        exit(-1);
-    }
-
-    original->col_ptr=(int*)malloc((n+1)*sizeof(int));
-    if(original->col_ptr==NULL){
-        printf("On reconstruct_from_blocks could not allocate memory for original->col_ptr!, error\n");
-        exit(-1);
-    }
+    CSCMatrix* original = malloc(sizeof(CSCMatrix));
+    original->n = n;
+    original->col_ptr = calloc((n_padded+1), sizeof(int));
     original->col_ptr[0]=0;
+    original->row_idx = malloc(nnz*sizeof(int));
 
-
-    original->row_idx=(int*)malloc((total_nz)*sizeof(int));
-    if(original->row_idx==NULL){
-        printf("On reconstruct_from_blocks could not allocate memory for original->col_ptr!, error\n");
-        exit(-1);
-    }
-
-    original->n=n;
-    //Finished initialising memory for the original matrix//
-
-
-    CSCMatrix* current_block;
-    int block_col;              //The BLOCK COLUMN where some specific block belongs to.
-    int current_nz;         //The nz elements of a specific column on a specific block.
-    int relative_col;       //A column of the non blocked matrix corresponds to a column of the blocks. We name his relative_col. It is given by relative_col=column%b.
-    int current_relative_row;        //The element we just extracted (is a row on some block)
-    int current_row;        //current_row= block_row*b + current_relative_row
-    int row_count;            //counting how many elements I have found up until a specific point for one column. Again used for indexing.
-    int column_offset;      //Helps us index the row_idx vector for the reconstructed matrix
-    /*Finished initialising useful variables*/
-
-
-    /*Now extracting the elements from the blocked Matrix and storing them in the reconstructed one */
-
-    //Each col_index iteration of the following loop corresponds to one of the n columns of the reconstructed matrix
-    for(int col_index=0; col_index<n; col_index++){
-        column_offset=original->col_ptr[col_index];
-        row_count=0;                            //This is set=0 for each new column we study
-
-        //Each block row iteration of the following loop corresponds to one of the nb blocks in this specific column
-        for(int block_row=0; block_row<nb; block_row++){
-            block_col=col_index/b;                              //In which one of the nb BLOCK COLUMNS the current block belongs to.
-            current_block=blocked[block_col+ block_row*nb];     //Using the current_block variable to point to the current block
-            relative_col=col_index%b;
-            current_nz=current_block->col_ptr[relative_col+1]- current_block->col_ptr[relative_col];        //The non zero elements in this column of the block (to be stored in the reconstructed)
-
-            original->col_ptr[col_index+1]=original->col_ptr[col_index+1] +current_nz;      //Increasing the value of the col_index vector
-
-            //Each i iteration of the following loop corresponds to one non zero element of the current column of the current block
-            for(int i=0; i<current_nz; i++){
-                current_relative_row=current_block->row_idx[current_block->col_ptr[relative_col]+i];
-                current_row=block_row*b + current_relative_row;
-                original->row_idx[column_offset+row_count]=current_row;
-                row_count=row_count+1;
-
-
+    // first pass, original->col_ptr initially contains nnz per column
+    #pragma omp parallel for schedule(static) collapse(2)
+    for (int block_col = 0; block_col < nb; block_col++) { // for each block column
+        for (int block_col_idx = 0; block_col_idx < b; block_col_idx++) { // for each column
+            int col = block_col*b + block_col_idx;
+            for (int block_row = 0; block_row < nb; block_row++) {
+                int block_idx = block_row*nb + block_col;
+                int block_col_ptr_off = blocked->col_ptr_indices[block_idx];
+                int* block_col_ptr = blocked->col_ptr_combined + block_col_ptr_off;
+                /*int block_row_idx_off = blocked->row_idx_indices[block_idx];
+                int* block_row_idx = blocked->row_idx_combined + block_row_idx_off;*/
+                
+                original->col_ptr[col] += block_col_ptr[block_col_idx+1]-block_col_ptr[block_col_idx];
             }
         }
-        original->col_ptr[col_index+1]=original->col_ptr[col_index]+row_count;
-
-    }
-    /*Finished with the reconstructing task*/
-    
-    //Printing the time needed
-    struct timespec ts_end2;
-    struct timespec duration2;
-
-    clock_gettime(CLOCK_MONOTONIC, &ts_end2);
-    duration2.tv_sec = ts_end2.tv_sec - ts_start2.tv_sec;
-    duration2.tv_nsec = ts_end2.tv_nsec - ts_start2.tv_nsec;
-    while (duration2.tv_nsec > 1000000000) {
-        duration2.tv_sec++;
-        duration2.tv_nsec -= 1000000000;
-    }
-    while (duration2.tv_nsec < 0) {
-        duration2.tv_sec--;
-        duration2.tv_nsec += 1000000000;
-    }
-    double dur_d2 = duration2.tv_sec + duration2.tv_nsec/1000000000.0;
-    printf("\nDuration of reconstruct from blocks: %lf seconds\n\n", dur_d2);
-
-
-    return original;
-
-}
-
-//This is an early version of a function which reconstructs a CSC matrix from the CSCMatrixBlocked struct.
-//It should require further optimisation
-CSCMatrix* fast_reconstruct_from_blocks(CSCMatrixBlocked* A){
-
-
-    struct timespec ts_start2;
-    clock_gettime(CLOCK_MONOTONIC, &ts_start2);
-
-    //Useful variables
-    int n=A->n;
-    int total_nz=A->nnz;
-    int nb=A->nb;
-    int b=A->b;
-    int column_offset;
-    int row_count;
-    int block_col;
-    int relative_col;
-    int current_nz;
-    int current_relative_row;
-
-    int* current_rox_idx;
-    int* current_col_ptr;
-
-    //Initialising the original matrix and allocating memory
-    CSCMatrix* original=(CSCMatrix*)malloc(sizeof(CSCMatrix));
-    if(original==NULL){
-        printf("On reconstruct_from_blocks could not allocate memory for original!, error\n");
-        exit(-1);
     }
 
-    original->col_ptr=(int*)malloc((n+1)*sizeof(int));
-    if(original->col_ptr==NULL){
-        printf("On reconstruct_from_blocks could not allocate memory for original->col_ptr!, error\n");
-        exit(-1);
-    }
-    original->col_ptr[0]=0;
-
-
-    original->row_idx=(int*)malloc((total_nz)*sizeof(int));
-    if(original->row_idx==NULL){
-        printf("On reconstruct_from_blocks could not allocate memory for original->col_ptr!, error\n");
-        exit(-1);
+    // cumsum to get final original->col_ptr
+    for (int i = 0, cumsum = 0; i <= n_padded; i++) {
+        int temp = cumsum;
+        cumsum += original->col_ptr[i];
+        original->col_ptr[i] = temp;
     }
 
-    original->n=n;
-    //Finished initialising memory for the original matrix
-
-    //Each col_index iteration of the following loop corresponds to one of the n columns of the reconstructed matrix
-    for(int col_index=0; col_index<n; col_index++){
-        column_offset=original->col_ptr[col_index];
-        row_count=0;                            //This is set=0 for each new column we study
-
-        //Each block row iteration of the following loop corresponds to one of the nb blocks in this specific column
-        for(int block_row=0; block_row<nb; block_row++){
-            block_col=col_index/b;                              //In which one of the nb BLOCK COLUMNS the current block belongs to.
-
-            current_col_ptr=A->col_ptr_combined + A->col_ptr_indices[block_col+ block_row*nb];
-            current_rox_idx=A->row_idx_combined + A->row_idx_indices[block_col+ block_row*nb];
-
-            relative_col=col_index%b;
-            current_nz=current_col_ptr[relative_col+1]- current_col_ptr[relative_col];        //The non zero elements in this column of the block (to be stored in the reconstructed)
-
-            original->col_ptr[col_index+1]=original->col_ptr[col_index+1] +current_nz;      //Increasing the value of the col_index vector
-
-            //Each i iteration of the following loop corresponds to one non zero element of the current column of the current block
-            for(int i=0; i<current_nz; i++){
-                current_relative_row=current_rox_idx[current_col_ptr[relative_col]+i];
-                original->row_idx[column_offset+row_count]=block_row*b + current_relative_row;
-                row_count=row_count+1;
+    // second pass to compute original->row_idx
+    #pragma omp parallel for schedule(static) collapse(2)
+    for (int block_col = 0; block_col < nb; block_col++) { // for each block column
+        for (int block_col_idx = 0; block_col_idx < b; block_col_idx++) { // for each column
+            int col = block_col*b + block_col_idx;
+            for (int block_row = 0; block_row < nb; block_row++) {
+                int block_idx = block_row*nb + block_col;
+                int block_col_ptr_off = blocked->col_ptr_indices[block_idx];
+                int* block_col_ptr = blocked->col_ptr_combined + block_col_ptr_off;
+                int block_row_idx_off = blocked->row_idx_indices[block_idx];
+                int* block_row_idx = blocked->row_idx_combined + block_row_idx_off;
+                
+                for (int rrow = block_col_ptr[block_col_idx]; rrow < block_col_ptr[block_col_idx+1]; rrow++) {
+                    int row = block_row*b + block_row_idx[rrow];
+                    int dest = original->col_ptr[col];
+                    original->row_idx[dest] = row;
+                    original->col_ptr[col]++;
+                }
             }
         }
-        original->col_ptr[col_index+1]=original->col_ptr[col_index]+row_count;
-
     }
+    // trim padding
+    original->col_ptr = realloc(original->col_ptr, (n+1)*sizeof(int));
 
-
-    //Printing the time needed
-    struct timespec ts_end2;
-    struct timespec duration2;
-
-    clock_gettime(CLOCK_MONOTONIC, &ts_end2);
-    duration2.tv_sec = ts_end2.tv_sec - ts_start2.tv_sec;
-    duration2.tv_nsec = ts_end2.tv_nsec - ts_start2.tv_nsec;
-    while (duration2.tv_nsec > 1000000000) {
-        duration2.tv_sec++;
-        duration2.tv_nsec -= 1000000000;
+    // undo changes to original->col_ptr
+    for(int col = 0, last = 0; col <= n; col++){
+        int temp = original->col_ptr[col];
+        original->col_ptr[col] = last;
+        last = temp;
     }
-    while (duration2.tv_nsec < 0) {
-        duration2.tv_sec--;
-        duration2.tv_nsec += 1000000000;
-    }
-    double dur_d2 = duration2.tv_sec + duration2.tv_nsec/1000000000.0;
-    printf("\nDuration of fast reconstruct from blocks: %lf seconds\n\n", dur_d2);
 
     return original;
 }
-
-
-
 
 /*Searches for the element (row,col) in the A array. If it exists (is equal to 1), it returns 1 , else it returns 0
  *  inputs: The CSCMatrix struct A
@@ -1052,7 +808,6 @@ void spmor(CSCMatrix* A, CSCMatrix* B, CSCMatrix* C) {
             int ja = A->row_idx[jja];
             int jb = B->row_idx[jjb];
 
-            printf("ja=%d, jb=%d\n", ja, jb);
             if (ja < jb) {
                 C->row_idx[nnz] = ja;
                 jja++;
@@ -1159,7 +914,6 @@ void spmandnot(CSCMatrix* A, CSCMatrix* B, CSCMatrix* C) {
 
     C->row_idx = realloc(C->row_idx, nnz*sizeof(int));
 }
-
 
 
 /*  BMM using definition, serial implementation, filtered
@@ -1504,12 +1258,21 @@ CSCMatrix* bmm_sp(CSCMatrix* A, CSCMatrix* B) {
     return C;
 }
 
+/* Get submatrix of blocked in CSCMatrix* form */
+CSCMatrix* get_matrix_block(CSCMatrixBlocked* blocked, int idx) {
+    CSCMatrix* ret = malloc(sizeof(CSCMatrix));
+    ret->col_ptr = blocked->col_ptr_combined + blocked->col_ptr_indices[idx];
+    ret->row_idx = blocked->row_idx_combined + blocked->row_idx_indices[idx];
+    ret->n = blocked->b;
+    return ret;
+}
+
 /**
  * serial block BMM
  */
 CSCMatrix* bmm_bs(CSCMatrix* A, CSCMatrix* B, int b) {
-    CSCMatrix** blocka = block_CSC(A, b);
-    CSCMatrix** blockb = block_CSC(B, b);
+    CSCMatrixBlocked* blocka = block_CSC(A, b);
+    CSCMatrixBlocked* blockb = block_CSC(B, b);
 
     assert(A->n == B->n);
 
@@ -1519,6 +1282,7 @@ CSCMatrix* bmm_bs(CSCMatrix* A, CSCMatrix* B, int b) {
         printf("could not allocate memory in block_CSC function for the CSCMatrix** blocked, exiting\n");
         exit(-1);
     }
+    int total_nnz = 0;
     #pragma omp parallel for schedule(static) collapse(2)
     for (int p = 0; p < n_b; p++) {
         for (int q = 0; q < n_b; q++) {
@@ -1531,38 +1295,65 @@ CSCMatrix* bmm_bs(CSCMatrix* A, CSCMatrix* B, int b) {
             for (int s = 0; s < n_b; s++) {
                 int blocka_idx = p*n_b+s;
                 int blockb_idx = s*n_b+q;
-                CSCMatrix* AB = bmm_ss(blocka[blocka_idx], blockb[blockb_idx]);
+                CSCMatrix* ablock = get_matrix_block(blocka, blocka_idx);
+                CSCMatrix* bblock = get_matrix_block(blockb, blockb_idx);
+
+                CSCMatrix* AB = bmm_ss(ablock, bblock);
                 CSCMatrix* tmp_blockc = csc_copy(blockc[blockc_idx]);
                 spmor2(tmp_blockc, AB, blockc[blockc_idx]);
                 CSCMatrixfree(AB);
                 CSCMatrixfree(tmp_blockc);
                 free(AB);
                 free(tmp_blockc);
+
+                free(ablock);
+                free(bblock);
             }
+            #pragma omp atomic
+            total_nnz += blockc[blockc_idx]->col_ptr[b];
         }
     }
 
-    CSCMatrix* C = reconstruct_from_blocks(blockc, n_b, A->n);
-
+    CSCMatrixBlocked* C_blocked=(CSCMatrixBlocked*)malloc(sizeof(CSCMatrixBlocked));
+    C_blocked->b=b;
+    C_blocked->nb=n_b;
+    C_blocked->nnz=total_nnz;
+    C_blocked->n=A->n;
+    C_blocked->row_idx_combined=malloc(total_nnz*sizeof(int));
+    C_blocked->row_idx_indices=malloc(n_b*n_b*sizeof(int));
+    C_blocked->col_ptr_combined=malloc(n_b*n_b*(b+1)*sizeof(int));
+    C_blocked->col_ptr_indices=malloc(n_b*n_b*sizeof(int));
+    int nnz=0;
+    for (int p = 0; p < n_b; p++) {
+        for (int q = 0; q < n_b; q++) {
+            int block_idx = p*n_b+q;
+            int block_nnz = blockc[block_idx]->col_ptr[b];
+            memcpy(C_blocked->row_idx_combined+nnz, blockc[block_idx]->row_idx, block_nnz*sizeof(int));
+            C_blocked->row_idx_indices[block_idx] = nnz;
+            nnz += block_nnz;
+            memcpy(C_blocked->col_ptr_combined+block_idx*(b+1), blockc[block_idx]->col_ptr, (b+1)*sizeof(int));
+            C_blocked->col_ptr_indices[block_idx] = block_idx*(b+1);
+        }
+    }
     for (int i = 0; i < n_b*n_b; i++) {
-        CSCMatrixfree(blocka[i]);
-        CSCMatrixfree(blockb[i]);
         CSCMatrixfree(blockc[i]);
-        free(blocka[i]);
-        free(blockb[i]);
         free(blockc[i]);
     }
-    free(blocka);
-    free(blockb);
     free(blockc);
+
+    CSCMatrix* C = unblock_CSC(C_blocked, n_b, A->n);
+
+    CSCMatrixBlocked_free(blocka);
+    CSCMatrixBlocked_free(blockb);
+    CSCMatrixBlocked_free(C_blocked);
 
     return C;
 }
 
 CSCMatrix* bmm_bsf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, int b) {
-    CSCMatrix** blocka = block_CSC(A, b);
-    CSCMatrix** blockb = block_CSC(B, b);
-    CSCMatrix** blockf = block_CSC(F, b);
+    CSCMatrixBlocked* blocka = block_CSC(A, b);
+    CSCMatrixBlocked* blockb = block_CSC(B, b);
+    CSCMatrixBlocked* blockf = block_CSC(F, b);
 
     assert(A->n == B->n);
     assert(A->n == F->n);
@@ -1573,6 +1364,7 @@ CSCMatrix* bmm_bsf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, int b) {
         printf("could not allocate memory in block_CSC function for the CSCMatrix** blocked, exiting\n");
         exit(-1);
     }
+    int total_nnz = 0;
     #pragma omp parallel for schedule(static) collapse(2)
     for (int p = 0; p < n_b; p++) {
         for (int q = 0; q < n_b; q++) {
@@ -1582,12 +1374,16 @@ CSCMatrix* bmm_bsf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, int b) {
             blockc[blockc_idx]->n = b;
             blockc[blockc_idx]->col_ptr = calloc(b+1, sizeof(int));
             blockc[blockc_idx]->row_idx = NULL; // NULL can be passed to realloc later
-            CSCMatrix* X = csc_copy(blockf[blockc_idx]);
+
+            CSCMatrix* fblock = get_matrix_block(blockf, blockc_idx);
+            CSCMatrix* X = csc_copy(fblock);
             for (int s = 0; s < n_b; s++) {
                 int blocka_idx = p*n_b+s;
                 int blockb_idx = s*n_b+q;
+                CSCMatrix* ablock = get_matrix_block(blocka, blocka_idx);
+                CSCMatrix* bblock = get_matrix_block(blockb, blockb_idx);
 
-                CSCMatrix* AB = bmm_ssf(blocka[blocka_idx], blockb[blockb_idx], X);
+                CSCMatrix* AB = bmm_ssf(ablock, bblock, X);
                 CSCMatrix* tmp_blockc = csc_copy(blockc[blockc_idx]);
                 spmor2(tmp_blockc, AB, blockc[blockc_idx]);
                 CSCMatrixfree(AB);
@@ -1599,28 +1395,49 @@ CSCMatrix* bmm_bsf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, int b) {
                 spmandnot(blockc[blockc_idx], tmp_x, X);
                 CSCMatrixfree(tmp_x);
                 free(tmp_x);
+
+                free(ablock);
+                free(bblock);
             }
             CSCMatrixfree(X);
             free(X);
+            free(fblock);
+            #pragma omp atomic
+            total_nnz += blockc[blockc_idx]->col_ptr[b];
         }
     }
 
-    CSCMatrix* C = reconstruct_from_blocks(blockc, n_b, A->n);
-
-    for (int i = 0; i < n_b*n_b; i++) {
-        CSCMatrixfree(blocka[i]);
-        CSCMatrixfree(blockb[i]);
-        CSCMatrixfree(blockc[i]);
-        CSCMatrixfree(blockf[i]);
-        free(blocka[i]);
-        free(blockb[i]);
-        free(blockc[i]);
-        free(blockf[i]);
+    CSCMatrixBlocked* C_blocked=(CSCMatrixBlocked*)malloc(sizeof(CSCMatrixBlocked));
+    C_blocked->b=b;
+    C_blocked->nb=n_b;
+    C_blocked->nnz=total_nnz;
+    C_blocked->n=A->n;
+    C_blocked->row_idx_combined=malloc(total_nnz*sizeof(int));
+    C_blocked->row_idx_indices=malloc(n_b*n_b*sizeof(int));
+    C_blocked->col_ptr_combined=calloc(n_b*n_b*(b+1),sizeof(int));
+    C_blocked->col_ptr_indices=malloc(n_b*n_b*sizeof(int));
+    int nnz=0;
+    for (int p = 0; p < n_b; p++) {
+        for (int q = 0; q < n_b; q++) {
+            int block_idx = p*n_b+q;
+            int block_nnz = blockc[block_idx]->col_ptr[b];
+            memcpy(C_blocked->row_idx_combined+nnz, blockc[block_idx]->row_idx, block_nnz*sizeof(int));
+            C_blocked->row_idx_indices[block_idx] = nnz;
+            nnz += block_nnz;
+            memcpy(C_blocked->col_ptr_combined+block_idx*(b+1), blockc[block_idx]->col_ptr, (b+1)*sizeof(int));
+            C_blocked->col_ptr_indices[block_idx] = block_idx*(b+1);
+            CSCMatrixfree(blockc[block_idx]);
+            free(blockc[block_idx]);
+        }
     }
-    free(blocka);
-    free(blockb);
     free(blockc);
-    free(blockf);
+
+    CSCMatrix* C = unblock_CSC(C_blocked, n_b, A->n);
+
+    CSCMatrixBlocked_free(blocka);
+    CSCMatrixBlocked_free(blockb);
+    CSCMatrixBlocked_free(C_blocked);
+    CSCMatrixBlocked_free(blockf);
 
     return C;
 }
