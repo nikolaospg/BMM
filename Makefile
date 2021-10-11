@@ -34,7 +34,7 @@ bmm: bin | mmio
 mpi: bin | mmio
 	$(MPICC) $(CFLAGS) -o $(BINS_DIR)/$@ src/mpi.c $(LDFLAGS)
 
-test: bin | mmio
+test: bin | mmio mpi
 	$(CC) $(CFLAGS) -o $(BINS_DIR)/product_test test/product_test.c $(LDFLAGS)
 	$(CC) $(CFLAGS) -o $(BINS_DIR)/conversion_test test/conversion_test.c $(LDFLAGS)
 	$(CC) $(CFLAGS) -o $(BINS_DIR)/blocking_test test/blocking_test.c $(LDFLAGS) 
