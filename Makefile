@@ -1,4 +1,5 @@
 CC=gcc
+MPICC=mpicc
 CPPC=g++
 
 BINS_DIR=bin
@@ -30,6 +31,9 @@ mmio: bin
 bmm: bin | mmio
 	$(CC) $(CFLAGS) -o $(BINS_DIR)/$@ src/bmm.c $(LDFLAGS)
 
+mpi: bin | mmio
+	$(MPICC) $(CFLAGS) -o $(BINS_DIR)/$@ src/mpi.c $(LDFLAGS)
+
 test: bin | mmio
 	$(CC) $(CFLAGS) -o $(BINS_DIR)/product_test test/product_test.c $(LDFLAGS)
 	$(CC) $(CFLAGS) -o $(BINS_DIR)/conversion_test test/conversion_test.c $(LDFLAGS)
@@ -42,7 +46,7 @@ bash: bin
 	chmod +x bmm_self.bash
 	chmod +x benchmark.bash
 
-all: bmm test bash
+all: bmm test bash mpi
 
 clean:
 	rm -rf $(BINS_DIR)
