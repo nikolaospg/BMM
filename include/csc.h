@@ -7,6 +7,10 @@
 #include <time.h>
 #include <stdio.h>
 #include <assert.h>
+#define min(a,b) \
+   ({ __typeof__ (a) _a = (a); \
+       __typeof__ (b) _b = (b); \
+     _a < _b ? _a : _b; })
 
 #include "utils.h"
 #include "mmio.h"
@@ -49,6 +53,19 @@ typedef struct{
 
 }CSCMatrixBlocked;
 
+CSCMatrixBlocked* create_empty_block_matrix(int n, int b, int nnz) {
+    CSCMatrixBlocked* ret = malloc(sizeof(CSCMatrixBlocked));
+    int nb = ceil(n/((double) b));
+    ret->nb = nb;
+    ret->b = b;
+    ret->n = n;
+    ret->nnz = nnz;
+    ret->row_idx_combined = malloc(nnz*sizeof(int));             
+    ret->col_ptr_combined = malloc(nb*nb*(b+1)*sizeof(int));       
+    ret->row_idx_indices = malloc((nb*nb+1)*sizeof(int));
+    ret->col_ptr_indices = malloc((nb*nb+1)*sizeof(int));
+    return ret;
+}
 
 /**
  * Frees the memory allocated for the row_idx and col_ptr of a specific CSCMatrix structure.
@@ -456,7 +473,7 @@ CSCMatrixBlocked* block_CSC(CSCMatrix* A, int b){
     //cumulative way, in another loop later on they are changed so that they show the data in a cumulative way
     #pragma omp parallel for
     for (int current_block_col = 0; current_block_col < nb; current_block_col++) {
-        for(int col=current_block_col*b; col<(current_block_col+1)*b; col++){
+        for(int col=current_block_col*b; col<min((current_block_col+1)*b, n); col++){
             for (int index=col_ptr[col]; index<col_ptr[col+1]; index++ ){
                 current_block_row=row_idx[index]/b;
                 int access_index=current_block_row*help_variable + current_block_col +col;
@@ -573,7 +590,7 @@ CSCMatrixBlocked* block_CSC_cols(CSCMatrix* A, int b){
     //cumulative way, in another loop later on they are changed so that they show the data in a cumulative way
     #pragma omp parallel for
     for (int current_block_col = 0; current_block_col < nb; current_block_col++) {
-        for(int col=current_block_col*b; col<(current_block_col+1)*b; col++){
+        for(int col=current_block_col*b; col<min((current_block_col+1)*b,n); col++){
             //int current_block_col=col/b;
             for (int index=col_ptr[col]; index<col_ptr[col+1]; index++ ){
                 current_row=row_idx[index];
@@ -1320,9 +1337,9 @@ CSCMatrix* bmm_bs(CSCMatrix* A, CSCMatrix* B, int b) {
     C_blocked->nnz=total_nnz;
     C_blocked->n=A->n;
     C_blocked->row_idx_combined=malloc(total_nnz*sizeof(int));
-    C_blocked->row_idx_indices=malloc(n_b*n_b*sizeof(int));
+    C_blocked->row_idx_indices=malloc((n_b*n_b+1)*sizeof(int));
     C_blocked->col_ptr_combined=malloc(n_b*n_b*(b+1)*sizeof(int));
-    C_blocked->col_ptr_indices=malloc(n_b*n_b*sizeof(int));
+    C_blocked->col_ptr_indices=malloc((n_b*n_b+1)*sizeof(int));
     int nnz=0;
     for (int p = 0; p < n_b; p++) {
         for (int q = 0; q < n_b; q++) {
@@ -1335,6 +1352,8 @@ CSCMatrix* bmm_bs(CSCMatrix* A, CSCMatrix* B, int b) {
             C_blocked->col_ptr_indices[block_idx] = block_idx*(b+1);
         }
     }
+    C_blocked->row_idx_indices[n_b*n_b] = nnz;
+    C_blocked->col_ptr_indices[n_b*n_b] = n_b*n_b*(b+1);
     for (int i = 0; i < n_b*n_b; i++) {
         CSCMatrixfree(blockc[i]);
         free(blockc[i]);
@@ -1430,6 +1449,8 @@ CSCMatrix* bmm_bsf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, int b) {
             free(blockc[block_idx]);
         }
     }
+    C_blocked->row_idx_indices[n_b*n_b] = nnz;
+    C_blocked->col_ptr_indices[n_b*n_b] = n_b*n_b*(b+1);
     free(blockc);
 
     CSCMatrix* C = unblock_CSC(C_blocked, n_b, A->n);

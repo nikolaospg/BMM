@@ -12,8 +12,8 @@ do
   ./bin/product_test 500 0.9 ss 0
   ./bin/product_test 500 0.9 ss 1
   ./bin/product_test 500 0.9 sp 0
-  ./bin/product_test 50 0.9 bs 0 25
-  ./bin/product_test 50 0.9 bs 1 25
+  ./bin/product_test 50 0.9 bs 0 26
+  ./bin/product_test 50 0.9 bs 1 26
   ./bin/product_test 50 0.9 cp 1
   ./bin/conversion_test 500
   ./bin/blocking_test 500 20
