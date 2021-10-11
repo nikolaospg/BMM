@@ -17,7 +17,7 @@
 
 #include <omp.h>
 
-#define AF_THRESH 4.5
+#define AF_THRESH 3.5
 
 /** 
  * Defining a Struct, which resembles the CSC data structure 
@@ -1321,7 +1321,7 @@ void block_bmmf(CSCMatrixBlocked* A_blocked, CSCMatrixBlocked* B_blocked, CSCMat
         CSCMatrix* ablock = get_matrix_block(A_blocked, blocka_idx);
         CSCMatrix* bblock = get_matrix_block(B_blocked, blockb_idx);
 
-        CSCMatrix* AB = bmm_cpf(ablock, bblock, X);
+        CSCMatrix* AB = bmm_af(ablock, bblock, X);
         CSCMatrix* tmp_blockc = csc_copy(*Cpq);
         spmor2(tmp_blockc, AB, *Cpq);
         CSCMatrixfree(AB);
