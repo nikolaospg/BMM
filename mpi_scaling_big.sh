@@ -31,7 +31,7 @@ nb=$min_nb
 echo "Starting benchmark MPI big"
 while [[ $nb -le $max_nb ]]
 do
-    ./bmm_self_mpi.bash $mat nb
-    ./bmm_self_mpi.bash $mat nb -f
+    ./bmm_self_mpi.bash $mat $nb
+    ./bmm_self_mpi.bash $mat $nb -f
     ((nb=nb+1))
 done
