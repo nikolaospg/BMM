@@ -17,8 +17,8 @@ do
   ./bin/product_test 50 0.9 cp 1
   ./bin/conversion_test 500
   ./bin/blocking_test 500 20
-  mpiexec -np 2 bin/mpi -a data/dblp-2010.mtx -b data/dblp-2010.mtx -s 170000 -t
-  mpiexec -np 2 bin/mpi -a data/dblp-2010.mtx -b data/dblp-2010.mtx -f data/dblp-2010.mtx -s 170000 -t
+  mpiexec -np 2 bin/mpi -a data/dblp-2010.mtx -b data/dblp-2010.mtx -s 108729 -t
+  mpiexec -np 2 bin/mpi -a data/dblp-2010.mtx -b data/dblp-2010.mtx -f data/dblp-2010.mtx -s 108729 -t
   #./bin/demo_bss 500 0.9 324
   echo "Iteration $i Complete - No Errors"
 done 

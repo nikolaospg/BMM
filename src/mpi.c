@@ -140,9 +140,10 @@ int main(int argc, char** argv) {
     // each process will process blocks ceil(nb^2/comm_size) at index rank+i*comm_size, i=0,..,ceil(nb^2/comm_size)-1
     int max_blocks_per_process = ceil(nb*nb/((double)comm_size));
     CSCMatrix** process_blocks = malloc(max_blocks_per_process*sizeof(CSCMatrix*));
-    //#pragma omp parallel for if(!filtered) // non filtered BMM is serial
+    #pragma omp parallel for if(!filtered) // non filtered BMM is serial
     for (int i = 0; i < max_blocks_per_process; i++) {
         int block_index = rank+i*comm_size;
+        if (block_index >= nb*nb) continue; // no more blocks
         int p = block_index/nb;
         int q = block_index%nb;
 
@@ -219,11 +220,15 @@ int main(int argc, char** argv) {
     } else {
         // send NNZ
         for (int i = 0; i < max_blocks_per_process; i++) {
+            int block_index = rank+i*comm_size;
+            if (block_index >= nb*nb) break; // no more blocks
             CSCMatrix* block = process_blocks[i];
             MPI_Send(&block->col_ptr[block->n], 1, MPI_INT, 0, nnz_tag, MPI_COMM_WORLD);
         }
         // send blocks
         for (int i = 0; i < max_blocks_per_process; i++) {
+            int block_index = rank+i*comm_size;
+            if (block_index >= nb*nb) break; // no more blocks
             CSCMatrix* block = process_blocks[i];
             MPI_Send(block->col_ptr, block->n+1, MPI_INT, 0, col_ptr_tag, MPI_COMM_WORLD);
             MPI_Send(block->row_idx, block->col_ptr[block->n], MPI_INT, 0, row_idx_tag, MPI_COMM_WORLD);
@@ -231,6 +236,8 @@ int main(int argc, char** argv) {
     }
     // free other common resources
     for (int i = 0; i < max_blocks_per_process; i++) {
+        int block_index = rank+i*comm_size;
+        if (block_index >= nb*nb) break; // no more blocks
         CSCMatrixfree(process_blocks[i]);
         free(process_blocks[i]);
     }
