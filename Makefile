@@ -44,7 +44,9 @@ test: bin | mmio mpi
 
 bash: bin
 	chmod +x bmm_self.bash
+	chmod +x bmm_self_mpi.bash
 	chmod +x benchmark.bash
+	chmod +x benchmark_mpi.bash
 
 all: bmm test bash mpi
 

@@ -94,8 +94,9 @@ int main(int argc, char** argv) {
             else
                 C_actual = bmm_ss(A, B);
         }
-        printf("%s, nb=%d, ", afile, nb);
+        printf("%s, nb=%d, filtered=%d, comm_size=%d\n", afile, nb, filtered, comm_size);
         clock_gettime(CLOCK_MONOTONIC, &ts_start); // time start
+
         b = ceil(A->n/((double)nb));
         A_blocked = block_CSC(A, b);
         CSCMatrixfree(A);
@@ -108,6 +109,10 @@ int main(int argc, char** argv) {
             CSCMatrixfree(F);
             free(F);
         }
+        struct timespec ts_end_blocking;
+        clock_gettime(CLOCK_MONOTONIC, &ts_end_blocking);
+        double dur_d = duration_secs(ts_start, ts_end_blocking);
+        printf("block duration: %lf seconds\n", dur_d);
 
         n = A_blocked->n;
         nb = A_blocked->nb;
@@ -199,6 +204,8 @@ int main(int argc, char** argv) {
             }
         }
         // block matrix attained, now convert back to CSC
+        struct timespec ts_start_unblock;
+        clock_gettime(CLOCK_MONOTONIC, &ts_start_unblock);
         int total_nnz = 0;
         for (int i = 0; i<nb*nb; i++) total_nnz+=nnz_map[i];
         CSCMatrixBlocked* C_blocked = blockcsc_tobsc(all_blocks, nb, n, total_nnz);
@@ -212,7 +219,9 @@ int main(int argc, char** argv) {
 
         CSCMatrix* C = unblock_CSC(C_blocked, nb, n);
         clock_gettime(CLOCK_MONOTONIC, &ts_end);
-        double dur_d = duration_secs(ts_start, ts_end);
+        double dur_d = duration_secs(ts_start_unblock, ts_end);
+        printf("unblock duration: %lf seconds\n", dur_d);
+        dur_d = duration_secs(ts_start, ts_end);
         printf("MPI BMM duration: %lf seconds\n", dur_d);
         if (test) {
             csc_validate(C, C_actual);
