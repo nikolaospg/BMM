@@ -69,7 +69,7 @@ int main(int argc, char** argv) {
                     break;
                 // Block size (required)
                 case 's':
-                    b = atoi(optarg);
+                    nb = atoi(optarg);
                     break;
                 // Whether to run test after result (optional)
                 case 't':
@@ -94,7 +94,9 @@ int main(int argc, char** argv) {
             else
                 C_actual = bmm_ss(A, B);
         }
+        printf("%s, nb=%d, ", afile, nb);
         clock_gettime(CLOCK_MONOTONIC, &ts_start); // time start
+        b = ceil(A->n/((double)nb));
         A_blocked = block_CSC(A, b);
         CSCMatrixfree(A);
         free(A);
