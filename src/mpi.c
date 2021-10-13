@@ -4,7 +4,8 @@
 #include <getopt.h>
 #include <time.h>
 
-#include "csc.h"
+#include "bmm.h"
+#include "sparse.h"
 #include "mpi.h"
 
 void MPI_Bcast_mat(CSCMatrixBlocked* m, int rank) {
@@ -140,14 +141,14 @@ int main(int argc, char** argv) {
     MPI_Bcast_mat(B_blocked, rank);
     if (filtered)
         MPI_Bcast_mat(F_blocked, rank);
-    // end of initialization. A_blocked, B_blocked (and F_blocked) is in every process'memory now
+    // end of initialization. A_blocked, B_blocked (and F_blocked) is in every process' memory now
 
     // bmm
     // each process will be dealt a block of C, in row major fashion
-    // each process will process blocks ceil(nb^2/comm_size) at index rank+i*comm_size, i=0,..,ceil(nb^2/comm_size)-1
+    // each process will process ceil(nb^2/comm_size) blocks at index rank+i*comm_size, i=0,..,ceil(nb^2/comm_size)-1
     int max_blocks_per_process = ceil(nb*nb/((double)comm_size));
     CSCMatrix** process_blocks = malloc(max_blocks_per_process*sizeof(CSCMatrix*));
-    #pragma omp parallel for if(!filtered) // non filtered BMM is serial
+    #pragma omp parallel for if(!filtered) // non filtered BMM is serial, use OpenMP across block BMMs
     for (int i = 0; i < max_blocks_per_process; i++) {
         int block_index = rank+i*comm_size;
         if (block_index >= nb*nb) continue; // no more blocks

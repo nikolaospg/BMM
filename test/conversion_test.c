@@ -1,7 +1,8 @@
 /*This is a script demonstrating that the convertion from a row major to a CSC and back is correct. Just run the script.sh and you will see.*/
 
 
-#include "csc.h"
+#include "bmm.h"
+#include "sparse.h"
 
 
 int main(int argc, char* argv[]){

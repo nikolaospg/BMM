@@ -1,5 +1,5 @@
-#include "csc.h"
-
+#include "bmm.h"
+#include "sparse.h"
 
 
 int main(int argc, char* argv[]){

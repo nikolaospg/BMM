@@ -19,6 +19,5 @@ do
   ./bin/blocking_test 500 20
   mpiexec -np 2 bin/mpi -a data/dblp-2010.mtx -b data/dblp-2010.mtx -s 3 -t
   mpiexec -np 2 bin/mpi -a data/dblp-2010.mtx -b data/dblp-2010.mtx -f data/dblp-2010.mtx -s 3 -t
-  #./bin/demo_bss 500 0.9 324
   echo "Iteration $i Complete - No Errors"
 done 

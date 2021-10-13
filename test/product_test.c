@@ -1,4 +1,5 @@
-#include "csc.h"
+#include "bmm.h"
+#include "sparse.h"
 
 //Programm used to test whether the product is correct. It does this by comparing the result to the result we would have had without the CSC matrices.
 
