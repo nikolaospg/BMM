@@ -32,8 +32,30 @@ filtered `ss` is likely faster. Not supported for non-filtered BMM, use `ss` ins
 * `ss`  
 symbolic, SMMP-like BMM with only one pass. Very fast for non-filtered BMM, but mostly outclassed by `cp` for filtered BMM, especially on denser matrices.
 * `sp`  
-An attempt to parallelize `ss`, which actually ended up being slower.
+An attempt to parallelize `ss`, which ended up needing too many threads to become faster than `ss`.
 * `a`  
 Adaptive method which chooses between `ss` and `cp` based on matrix desnity. Only supported for filtered BMM.
 * `bp`  
 Block BMM with OpenMP parallelization. Uses `ss` for non-filtered BMM and `a` for filtered BMM.
+### Convenient bash scripts
+```
+./bmm_self.bash <matrix> <method> (-f)
+```
+Performs BMM with A=B=F=<matrix> so you don't have to type the same matrix 3 times. Cannot be used with `bp`
+```
+./bmm_self_mpi.bash <matrix> <blocksize> (-f)
+```
+Similar to the previous one but for `mpi`. Instead of `method` you specify `blocksize`
+```
+./benchmark.bash <method> (-f)
+```
+Run `bmm_self.bash` for multiple matrices in a row, specified in `benchmark.bash`
+  ```
+./benchmark_mpi.bash <blocksize> (-f)
+```
+Similar to the previous one but for `mpi`. Instead of `method` you specify `blocksize`
+## Run tests
+All tests are in the `test` folder, which cover every BMM implementation. To run all tests, just run
+```
+make test
+```
