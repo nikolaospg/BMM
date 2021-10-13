@@ -407,7 +407,7 @@ void block_bmmf(CSCMatrixBlocked* A_blocked, CSCMatrixBlocked* B_blocked, CSCMat
 /**
  * serial block BMM
  */
-CSCMatrix* bmm_bs(CSCMatrix* A, CSCMatrix* B, int b) {
+CSCMatrix* bmm_bp(CSCMatrix* A, CSCMatrix* B, int b) {
     CSCMatrixBlocked* blocka = block_CSC(A, b);
     CSCMatrixBlocked* blockb = block_CSC(B, b);
 
@@ -452,7 +452,7 @@ CSCMatrix* bmm_bs(CSCMatrix* A, CSCMatrix* B, int b) {
     return C;
 }
 
-CSCMatrix* bmm_bsf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, int b) {
+CSCMatrix* bmm_bpf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, int b) {
     CSCMatrixBlocked* blocka = block_CSC(A, b);
     CSCMatrixBlocked* blockb = block_CSC(B, b);
     CSCMatrixBlocked* blockf = block_CSC(F, b);
@@ -467,7 +467,7 @@ CSCMatrix* bmm_bsf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, int b) {
         exit(-1);
     }
     int total_nnz = 0;
-    #pragma omp parallel for schedule(static) collapse(2)
+    //#pragma omp parallel for schedule(static) collapse(2)
     for (int p = 0; p < n_b; p++) {
         for (int q = 0; q < n_b; q++) {
             int blockc_idx = p*n_b+q;
@@ -478,7 +478,7 @@ CSCMatrix* bmm_bsf(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, int b) {
             blockc[blockc_idx]->row_idx = NULL; // NULL can be passed to realloc later
             block_bmmf(blocka, blockb, blockf, &blockc[blockc_idx], p, q);
 
-            #pragma omp atomic
+            //#pragma omp atomic
             total_nnz += blockc[blockc_idx]->col_ptr[b];
         }
     }
@@ -509,11 +509,11 @@ CSCMatrix* bmm(CSCMatrix* A, CSCMatrix* B, CSCMatrix* F, char* method, int filte
         } else {
             return bmm_ds(A, B);
         }
-    } else if (strcmp(method, "bs") == 0) {
+    } else if (strcmp(method, "bp") == 0) {
         if (filter) {
-            return bmm_bsf(A, B, F, b);
+            return bmm_bpf(A, B, F, b);
         } else {
-            return bmm_bs(A, B, b);
+            return bmm_bp(A, B, b);
         }
     } else if (strcmp(method, "ss") == 0) {
         if (filter) {
