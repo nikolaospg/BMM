@@ -63,7 +63,6 @@ CSCMatrixBlocked* block_CSC(CSCMatrix* A, int b){
     int* col_ptr=A->col_ptr;
     int nnz=col_ptr[n];
     int* row_idx=A->row_idx;
-    int current_block_row;
     int help_variable=(b+1)*nb;         //This is used on some products many times
     //Finished with useful variables
 
@@ -89,7 +88,7 @@ CSCMatrixBlocked* block_CSC(CSCMatrix* A, int b){
         for(int col=current_block_col*b; col<(current_block_col+1)*b; col++){
             if (col >= n) break;
             for (int index=col_ptr[col]; index<col_ptr[col+1]; index++ ){
-                current_block_row=row_idx[index]/b;
+                int current_block_row=row_idx[index]/b;
                 int access_index=current_block_row*help_variable + current_block_col +col;
                 col_ptr_combined[access_index+1]++;
                 row_idx_indices[current_block_row*nb + current_block_col +1]++;
@@ -123,7 +122,7 @@ CSCMatrixBlocked* block_CSC(CSCMatrix* A, int b){
     for(int col=0; col<n; col++){
         int current_block_col=col/b;
         for (int index=col_ptr[col]; index<col_ptr[col+1]; index++ ){
-            current_block_row=row_idx[index]/b;
+            int current_block_row=row_idx[index]/b;
             access_index=current_block_row*nb + current_block_col;
             offset=row_idx_indices[access_index] + count_array[access_index];
             row_idx_combined[offset]=row_idx[index]%b;

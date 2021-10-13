@@ -20,7 +20,7 @@ int main(int argc, char* argv[]){
     
     //Getting the blocked version and then reconstructing
     CSCMatrixBlocked* blocked= block_CSC(&A, b);
-    int nb=n/b;
+    int nb=ceil(blocked->n/((double) b));
 
     CSCMatrix* reconstructed=unblock_CSC(blocked, nb, A.n);
     int* y=CSC2array(*reconstructed);       //The array form of the reconstructed matrix

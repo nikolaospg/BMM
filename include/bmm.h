@@ -402,6 +402,8 @@ void block_bmmf(CSCMatrixBlocked* A_blocked, CSCMatrixBlocked* B_blocked, CSCMat
         free(ablock);
         free(bblock);
     }
+    CSCMatrixfree(X);
+    free(X);
 }
 
 /**
