@@ -1,2 +1,0 @@
-make test -> compiles and run the source files used for testing. The execution is done with the help of all_tests.bash
-make data -> downloads and extracts the files specified on the dataset.txt file. Done with the help of get_data.bash
