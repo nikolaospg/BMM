@@ -16,7 +16,7 @@ to try the various different BMM algorithms.
 ```
 
 ```
-./bin/mpi -a <matrix A> -b <matrix B> (-f <matrix F>) (-s <numblocks>) (-t)
+mpiexec -np <numprocesses> ./bin/mpi -a <matrix A> -b <matrix B> (-f <matrix F>) (-s <numblocks>) (-t)
 ```
 
 * Matrices `A`, `B` and `F` are the operands of the BMM operation. Matrix F is optional.
@@ -45,7 +45,7 @@ Performs BMM with A=B=F=<matrix> so you don't have to type the same matrix 3 tim
 ```
 ./bmm_self_mpi.bash <matrix> <blocksize> (-f)
 ```
-Similar to the previous one but for `mpi`. Instead of `method` you specify `blocksize`
+Similar to the previous one but for `mpi`. Instead of `method` you specify `blocksize`. Default number of processes is 2, if you need more, you can edit the file directly
 ```
 ./benchmark.bash <method> (-f)
 ```
